@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<title>TT Gauntlet Test</title>
+
+<style>
+    body {
+        margin: 0;
+        padding: 20px;
+        background: rgba(15,15,15,0.92);
+        color: white;
+        font-family: Arial, sans-serif;
+    }
+
+    .container {
+        max-width: 500px;
+    }
+
+    h1 {
+        margin-top: 0;
+        font-size: 24px;
+    }
+
+    button {
+        width: 100%;
+        padding: 14px;
+        margin-top: 10px;
+        border: none;
+        border-radius: 8px;
+        background: #2d89ff;
+        color: white;
+        font-size: 16px;
+        cursor: pointer;
+    }
+
+    button:hover {
+        background: #4da0ff;
+    }
+
+    .info {
+        margin-top: 20px;
+        padding: 12px;
+        background: rgba(255,255,255,0.08);
+        border-radius: 8px;
+    }
+
+    .small {
+        opacity: 0.7;
+        font-size: 14px;
+    }
+</style>
+</head>
+<body>
+
+<div class="container">
+    <h1>TT Gauntlet Route Test</h1>
+
+    <button onclick="nextWaypoint()">
+        Next Waypoint
+    </button>
+
+    <button onclick="setCurrentWaypoint()">
+        Re-Set Current Waypoint
+    </button>
+
+    <button onclick="closeApp()">
+        Close App
+    </button>
+
+    <div class="info">
+        <div id="businessName">Current: None</div>
+        <div id="businessCoords" class="small"></div>
+        <div id="progress" class="small"></div>
+    </div>
+</div>
+
+<script>
+/*
+    VERY SMALL TEST ROUTE
+    Replace later with full business list
+*/
+
+const route = [
+    {
+        id: "biz_wenger",
+        name: "Wenger Institute",
+        x: -368.79766845703,
+        y: -240.53649902344
+    },
+
+    {
+        id: "biz_vacaloco",
+        name: "La Vaca Loco",
+        x: 142.927383,
+        y: -1520.104736
+    },
+
+    {
+        id: "biz_horny_burgie",
+        name: "Horny's Burgers",
+        x: 1241.158325,
+        y: -367.413361
+    }
+];
+
+let currentIndex = 0;
+
+/*
+    Send command to FiveM / TT
+*/
+function sendCommand(data) {
+    window.parent.postMessage(data, "*");
+}
+
+/*
+    Set waypoint to current business
+*/
+function setCurrentWaypoint() {
+
+    const biz = route[currentIndex];
+
+    sendCommand({
+        type: "setWaypoint",
+        x: biz.x,
+        y: biz.y
+    });
+
+    updateUI();
+
+    sendCommand({
+        type: "notification",
+        text: `Waypoint set: ${biz.name}`
+    });
+
+    console.log("Waypoint set:", biz.name);
+}
+
+/*
+    Go to next business
+*/
+function nextWaypoint() {
+
+    currentIndex++;
+
+    if (currentIndex >= route.length) {
+        currentIndex = 0;
+
+        sendCommand({
+            type: "notification",
+            text: "Route restarted"
+        });
+    }
+
+    setCurrentWaypoint();
+}
+
+/*
+    Close app
+*/
+function closeApp() {
+    sendCommand({
+        type: "close"
+    });
+}
+
+/*
+    Update UI
+*/
+function updateUI() {
+
+    const biz = route[currentIndex];
+
+    document.getElementById("businessName").innerText =
+        `Current: ${biz.name}`;
+
+    document.getElementById("businessCoords").innerText =
+        `X: ${biz.x.toFixed(2)} | Y: ${biz.y.toFixed(2)}`;
+
+    document.getElementById("progress").innerText =
+        `${currentIndex + 1} / ${route.length}`;
+}
+
+/*
+    Listen for incoming TT data
+*/
+window.addEventListener("message", (event) => {
+
+    const data = event.data;
+
+    console.log("TT Data:", data);
+
+    /*
+        Future use:
+        - detect nearby business
+        - auto-next
+        - ownership
+        - player position
+    */
+});
+
+/*
+    Init
+*/
+updateUI();
+setCurrentWaypoint();
+
+</script>
+
+</body>
+</html>
