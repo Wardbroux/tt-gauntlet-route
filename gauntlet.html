@@ -206,16 +206,15 @@ CONFIG
 */
 
 const BUSINESS_CONFIG_URL =
-    "https://server.tycoon.community:30125/status/config/omni_businesses";
+    "https://tt-proxy.thisisaproxy.workers.dev/main/status/config/omni_businesses";
 
 const BUSINESS_STACKS_URL =
-    "https://api.tycoon.community/businesses.json";
+    "https://tt-proxy.thisisaproxy.workers.dev/main/businesses.json";
 
 const USER_BIZ_URL =
-    "https://api.tycoon.community/getuserbiz/";
+    "https://tt-proxy.thisisaproxy.workers.dev/main/@getuserbiz/";
 
 const ARRIVAL_DISTANCE = 60;
-
 /*
 ========================================
 STATE
@@ -244,8 +243,6 @@ TT COMMUNICATION
 
 function sendCommand(data) {
     window.parent.postMessage(data, "*");
-
-    console.log('TT SEND:', data);
 }
 
 /*
@@ -347,10 +344,20 @@ async function loadOwnedBusinesses() {
 
     try {
 
+        console.log("FETCH URL:", USER_BIZ_URL + userId);
+
         const response = await fetch(USER_BIZ_URL + userId);
 
         const text = await response.text();
-console.log(text);
+
+        console.log("OWNED RAW:", text);
+
+        if (!response.ok) {
+            console.error("Owned business fetch failed");
+            return;
+        }
+
+        const json = JSON.parse(text);
 
         const ownedData = json?.data?.businesses || {};
 
@@ -362,14 +369,15 @@ console.log(text);
             .filter(id => validBusinessIds.has(id));
 
         businesses.forEach(biz => {
-
             biz.owned = ownedBusinesses.includes(biz.id);
         });
+
+        console.log("Owned businesses:", ownedBusinesses.length);
 
         renderBusinesses();
 
     } catch (err) {
-        console.error(err);
+        console.error("loadOwnedBusinesses error:", err);
     }
 }
 
@@ -385,12 +393,24 @@ async function loadReadyBusinesses() {
 
     try {
 
-        const response = await fetch(
-            BUSINESS_STACKS_URL + '?key=' + apiKey
-        );
+        console.log("STACK FETCH");
+
+        const response = await fetch(BUSINESS_STACKS_URL, {
+            headers: {
+                "x-api-key": apiKey
+            }
+        });
 
         const text = await response.text();
-console.log(text);
+
+        console.log("STACK RAW:", text);
+
+        if (!response.ok) {
+            console.error("Stack fetch failed");
+            return;
+        }
+
+        const json = JSON.parse(text);
 
         const stackData = json?.data?.businesses || {};
 
@@ -419,10 +439,12 @@ console.log(text);
             biz.earnings = stackInfo?.earnings || 0;
         });
 
+        console.log("Ready businesses:", Object.keys(readyBusinesses).length);
+
         renderBusinesses();
 
     } catch (err) {
-        console.error(err);
+        console.error("loadReadyBusinesses error:", err);
     }
 }
 
@@ -644,18 +666,18 @@ window.addEventListener('message', (event) => {
 
     if (!data || typeof data !== 'object') return;
 
-console.log("TT MESSAGE:", data);
+const detectedUserId =
+    data.user_id ||
+    data.VRPID ||
+    data.vrpid;
 
-if (data.user_id) {
-    userId = data.user_id;
-}
+if (detectedUserId && detectedUserId !== userId) {
 
-if (data.VRPID) {
-    userId = data.VRPID;
-}
+    userId = detectedUserId;
 
-if (data.vrpid) {
-    userId = data.vrpid;
+    console.log("USER ID:", userId);
+
+    document.getElementById('userIdText').innerText = userId;
 }
 
 if (userId) {
