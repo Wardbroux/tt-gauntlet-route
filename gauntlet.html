@@ -707,29 +707,6 @@ window.addEventListener('message', async (event) => {
         }
     }
 
-    const data = event.data;
- 
-
-    if (!data || typeof data !== 'object') return;
-
-const detectedUserId =
-    data.user_id ||
-    data.VRPID ||
-    data.vrpid;
-
-if (detectedUserId && detectedUserId !== userId) {
-
-    userId = detectedUserId;
-
-    console.log("USER ID:", userId);
-
-    document.getElementById('userIdText').innerText = userId;
-}
-
-if (userId) {
-    document.getElementById('userIdText').innerText = userId;
-}
-
     if (data.pkey && !apiKey) {
 
         apiKey = data.pkey;
@@ -776,7 +753,9 @@ INIT
     }
 
     await loadBusinesses();
-
+    
+    renderBusinesses();
+    
     console.log('TT Helper Loaded');
 
 })();
