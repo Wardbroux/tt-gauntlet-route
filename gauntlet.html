@@ -8,7 +8,7 @@ Replace your current `gauntlet.html` with the code below.
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>TT Companion</title>
+<title>TT Gauntlet Helper</title>
 
 <style>
 body {
@@ -137,7 +137,10 @@ input {
 
 <div class="container">
 
-    <h1>TT Companion</h1>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+    <h1 style="margin:0;">TT Gauntlet Helper</h1>
+    <button onclick="closeApp()" style="width:auto;padding:10px 16px;background:#ff4d4d;">X</button>
+</div>
 
     <div class="tabs">
         <button class="tab active" onclick="switchTab('route')">Route</button>
@@ -246,6 +249,8 @@ TT COMMUNICATION
 
 function sendCommand(data) {
     window.parent.postMessage(data, "*");
+
+    console.log('TT SEND:', data);
 }
 
 /*
@@ -669,6 +674,17 @@ window.addEventListener('message', (event) => {
     checkArrival();
 });
 
+function closeApp() {
+
+    sendCommand({
+        type: 'close'
+    });
+
+    if (window.invokeNative) {
+        invokeNative('openUrl', 'about:blank');
+    }
+}
+
 /*
 ========================================
 INIT
@@ -692,10 +708,7 @@ INIT
 
     }, 2000);
 
-    sendCommand({
-        type: 'notification',
-        text: 'TT Companion Loaded'
-    });
+    console.log('TT Helper Loaded');
 
 })();
 
@@ -705,17 +718,9 @@ INIT
 </html>
 ```
 
-Notes:
+Troubleshooting:
 
-* The API URLs may need adjustment depending on TT's exact API structure.
-* The Lua parsing is intentionally simple for now.
-* The app is now structured enough to expand later.
-* Current features:
-
-  * Owned business detection
-  * Ready stack detection
-  * Route generation
-  * Auto advance
-  * Business browser
-  * API key saving
-  * Waypoint setting
+* If businesses do not load, the API endpoint may require slight URL changes.
+* Open F8 console in FiveM to inspect debug logs.
+* Make sure your API key is valid.
+* The app now filters deprecated businesses automatically.
