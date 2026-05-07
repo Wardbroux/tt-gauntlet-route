@@ -646,7 +646,7 @@ async function reloadData() {
 
     await loadBusinesses();
     await loadOwnedBusinesses();
-    await loadReadyBusinesses();
+    //await loadReadyBusinesses();
 
     sendCommand({
         type: 'notification',
@@ -660,10 +660,56 @@ TT DATA
 ========================================
 */
 
-window.addEventListener('message', (event) => {
+let initialized = false;
+
+window.addEventListener('message', async (event) => {
 
     const data = event.data;
-    console.log("FULL TT MESSAGE:", JSON.stringify(data));
+
+    if (!data) return;
+
+    // ONLY process TT state packets
+    if (typeof data !== "object") return;
+
+    // Grab user ID once
+    if (data.user_id && !userId) {
+
+        userId = data.user_id;
+
+        console.log("USER ID FOUND:", userId);
+
+        const userText = document.getElementById('userIdText');
+
+        if (userText) {
+            userText.innerText = userId;
+        }
+    }
+
+    // Initialize app once user ID exists
+    if (userId && !initialized) {
+
+        initialized = true;
+
+        console.log("Initializing app...");
+
+        try {
+
+            await loadOwnedBusinesses();
+            //await loadReadyBusinesses();
+
+            renderBusinesses();
+
+            console.log("Initialization complete");
+
+        } catch (err) {
+
+            console.error("Initialization failed:", err);
+        }
+    }
+});
+
+    const data = event.data;
+ 
 
     if (!data || typeof data !== 'object') return;
 
@@ -731,13 +777,6 @@ INIT
     }
 
     await loadBusinesses();
-
-    setTimeout(async () => {
-
-        await loadOwnedBusinesses();
-        await loadReadyBusinesses();
-
-    }, 2000);
 
     console.log('TT Helper Loaded');
 
