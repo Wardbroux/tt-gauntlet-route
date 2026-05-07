@@ -349,7 +349,8 @@ async function loadOwnedBusinesses() {
 
         const response = await fetch(USER_BIZ_URL + userId);
 
-        const json = await response.json();
+        const text = await response.text();
+console.log(text);
 
         const ownedData = json?.data?.businesses || {};
 
@@ -388,7 +389,8 @@ async function loadReadyBusinesses() {
             BUSINESS_STACKS_URL + '?key=' + apiKey
         );
 
-        const json = await response.json();
+        const text = await response.text();
+console.log(text);
 
         const stackData = json?.data?.businesses || {};
 
