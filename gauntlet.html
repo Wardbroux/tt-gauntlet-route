@@ -663,6 +663,7 @@ TT DATA
 window.addEventListener('message', (event) => {
 
     const data = event.data;
+    console.log("FULL TT MESSAGE:", JSON.stringify(data));
 
     if (!data || typeof data !== 'object') return;
 
