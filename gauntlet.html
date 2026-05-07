@@ -644,12 +644,23 @@ window.addEventListener('message', (event) => {
 
     if (!data || typeof data !== 'object') return;
 
-    if (data.user_id) {
+console.log("TT MESSAGE:", data);
 
-        userId = data.user_id;
+if (data.user_id) {
+    userId = data.user_id;
+}
 
-        document.getElementById('userIdText').innerText = userId;
-    }
+if (data.VRPID) {
+    userId = data.VRPID;
+}
+
+if (data.vrpid) {
+    userId = data.vrpid;
+}
+
+if (userId) {
+    document.getElementById('userIdText').innerText = userId;
+}
 
     if (data.pkey && !apiKey) {
 
