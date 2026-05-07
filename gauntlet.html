@@ -1,213 +1,721 @@
+# TT Gauntlet Companion App v2
+
+Replace your current `gauntlet.html` with the code below.
+
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-<title>TT Gauntlet Test</title>
+<title>TT Companion</title>
 
 <style>
-    body {
-        margin: 0;
-        padding: 20px;
-        background: rgba(15,15,15,0.92);
-        color: white;
-        font-family: Arial, sans-serif;
-    }
+body {
+    margin: 0;
+    padding: 0;
+    background: rgba(15,15,15,0.96);
+    color: white;
+    font-family: Arial, sans-serif;
+}
 
-    .container {
-        max-width: 500px;
-    }
+.container {
+    padding: 16px;
+}
 
-    h1 {
-        margin-top: 0;
-        font-size: 24px;
-    }
+h1 {
+    margin-top: 0;
+}
 
-    button {
-        width: 100%;
-        padding: 14px;
-        margin-top: 10px;
-        border: none;
-        border-radius: 8px;
-        background: #2d89ff;
-        color: white;
-        font-size: 16px;
-        cursor: pointer;
-    }
+.tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
 
-    button:hover {
-        background: #4da0ff;
-    }
+.tab {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    background: #333;
+    color: white;
+}
 
-    .info {
-        margin-top: 20px;
-        padding: 12px;
-        background: rgba(255,255,255,0.08);
-        border-radius: 8px;
-    }
+.tab.active {
+    background: #2d89ff;
+}
 
-    .small {
-        opacity: 0.7;
-        font-size: 14px;
-    }
+.panel {
+    display: none;
+}
+
+.panel.active {
+    display: block;
+}
+
+button {
+    width: 100%;
+    padding: 12px;
+    margin-top: 10px;
+    border: none;
+    border-radius: 8px;
+    background: #2d89ff;
+    color: white;
+    cursor: pointer;
+    font-size: 15px;
+}
+
+button:hover {
+    background: #4da0ff;
+}
+
+input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px;
+    margin-top: 10px;
+    border-radius: 8px;
+    border: none;
+    background: #222;
+    color: white;
+}
+
+.business-list {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.business {
+    padding: 12px;
+    margin-bottom: 8px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.06);
+}
+
+.business-name {
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.small {
+    font-size: 13px;
+    opacity: 0.8;
+}
+
+.green {
+    color: #66ff88;
+}
+
+.yellow {
+    color: #ffd966;
+}
+
+.red {
+    color: #ff7373;
+}
+
+.blue {
+    color: #63b3ff;
+}
+
+.route-active {
+    border: 2px solid #2d89ff;
+}
+
+.status-box {
+    background: rgba(255,255,255,0.05);
+    padding: 12px;
+    border-radius: 10px;
+    margin-bottom: 12px;
+}
 </style>
 </head>
+
 <body>
 
 <div class="container">
-    <h1>TT Gauntlet Route Test</h1>
 
-    <button onclick="nextWaypoint()">
-        Next Waypoint
-    </button>
+    <h1>TT Companion</h1>
 
-    <button onclick="setCurrentWaypoint()">
-        Re-Set Current Waypoint
-    </button>
-
-    <button onclick="closeApp()">
-        Close App
-    </button>
-
-    <div class="info">
-        <div id="businessName">Current: None</div>
-        <div id="businessCoords" class="small"></div>
-        <div id="progress" class="small"></div>
+    <div class="tabs">
+        <button class="tab active" onclick="switchTab('route')">Route</button>
+        <button class="tab" onclick="switchTab('businesses')">Businesses</button>
+        <button class="tab" onclick="switchTab('settings')">Settings</button>
     </div>
+
+    <div id="route" class="panel active">
+
+        <div class="status-box">
+            <div id="routeStatus">No route active</div>
+            <div id="routeProgress" class="small"></div>
+        </div>
+
+        <button onclick="generateReadyRoute()">
+            Generate Ready Route
+        </button>
+
+        <button onclick="nextWaypoint()">
+            Next Waypoint
+        </button>
+
+        <button onclick="toggleAutoAdvance()">
+            Toggle Auto Advance
+        </button>
+
+        <div id="routeBusinesses" class="business-list"></div>
+
+    </div>
+
+    <div id="businesses" class="panel">
+
+        <div class="status-box">
+            <div id="businessCount"></div>
+        </div>
+
+        <div class="business-list" id="businessList"></div>
+
+    </div>
+
+    <div id="settings" class="panel">
+
+        <div class="status-box">
+            <div>User ID: <span id="userIdText">Unknown</span></div>
+            <div>API Key: <span id="apiStatus">Missing</span></div>
+        </div>
+
+        <input id="apiKeyInput" placeholder="Enter Public API Key" />
+
+        <button onclick="saveApiKey()">
+            Save API Key
+        </button>
+
+        <button onclick="reloadData()">
+            Reload Data
+        </button>
+
+    </div>
+
 </div>
 
 <script>
+
 /*
-    VERY SMALL TEST ROUTE
-    Replace later with full business list
+========================================
+CONFIG
+========================================
 */
 
-const route = [
-    {
-        id: "biz_wenger",
-        name: "Wenger Institute",
-        x: -368.79766845703,
-        y: -240.53649902344
-    },
+const BUSINESS_CONFIG_URL =
+    "http://server.tycoon.community:30125/status/config/omni_businesses";
 
-    {
-        id: "biz_vacaloco",
-        name: "La Vaca Loco",
-        x: 142.927383,
-        y: -1520.104736
-    },
+const BUSINESS_STACKS_URL =
+    "https://api.tycoon.community/businesses.json";
 
-    {
-        id: "biz_horny_burgie",
-        name: "Horny's Burgers",
-        x: 1241.158325,
-        y: -367.413361
-    }
-];
+const USER_BIZ_URL =
+    "https://api.tycoon.community/getuserbiz/";
+
+const ARRIVAL_DISTANCE = 60;
+
+/*
+========================================
+STATE
+========================================
+*/
+
+let businesses = [];
+let ownedBusinesses = [];
+let readyBusinesses = {};
+let routeBusinesses = [];
 
 let currentIndex = 0;
+let autoAdvance = false;
+
+let userId = null;
+let playerX = 0;
+let playerY = 0;
+
+let apiKey = localStorage.getItem("tt_pkey") || "";
 
 /*
-    Send command to FiveM / TT
+========================================
+TT COMMUNICATION
+========================================
 */
+
 function sendCommand(data) {
     window.parent.postMessage(data, "*");
 }
 
 /*
-    Set waypoint to current business
+========================================
+TABS
+========================================
 */
-function setCurrentWaypoint() {
 
-    const biz = route[currentIndex];
+function switchTab(tabName) {
+
+    document.querySelectorAll('.panel').forEach(p => {
+        p.classList.remove('active');
+    });
+
+    document.querySelectorAll('.tab').forEach(t => {
+        t.classList.remove('active');
+    });
+
+    document.getElementById(tabName).classList.add('active');
+
+    event.target.classList.add('active');
+}
+
+/*
+========================================
+API KEY
+========================================
+*/
+
+function saveApiKey() {
+
+    apiKey = document.getElementById('apiKeyInput').value.trim();
+
+    localStorage.setItem('tt_pkey', apiKey);
+
+    document.getElementById('apiStatus').innerText = 'Saved';
 
     sendCommand({
-        type: "setWaypoint",
+        type: 'notification',
+        text: 'API key saved'
+    });
+}
+
+/*
+========================================
+LOAD BUSINESS CONFIG
+========================================
+*/
+
+async function loadBusinesses() {
+
+    try {
+
+        const response = await fetch(BUSINESS_CONFIG_URL);
+
+        const text = await response.text();
+
+        /*
+            VERY SIMPLE LUA PARSER
+            TEMPORARY
+        */
+
+        const regex = /name = "([^"]+)"[\s\S]*?id = "([^"]+)"[\s\S]*?cost = ([^,]+)[\s\S]*?reqlvl = \{"@business\.business\.>(\d+)"\}[\s\S]*?position = \{[^}]*x = ([\-\d\.]+), y = ([\-\d\.]+)/g;
+
+        businesses = [];
+
+        let match;
+
+        while ((match = regex.exec(text)) !== null) {
+
+            businesses.push({
+                name: match[1],
+                id: match[2],
+                cost: match[3],
+                requiredLevel: parseInt(match[4]),
+                x: parseFloat(match[5]),
+                y: parseFloat(match[6]),
+                owned: false,
+                ready: false
+            });
+        }
+
+        renderBusinesses();
+
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+/*
+========================================
+OWNED BUSINESSES
+========================================
+*/
+
+async function loadOwnedBusinesses() {
+
+    if (!userId) return;
+
+    try {
+
+        const response = await fetch(USER_BIZ_URL + userId);
+
+        const json = await response.json();
+
+        const ownedData = json?.data?.businesses || {};
+
+        const validBusinessIds = new Set(
+            businesses.map(b => b.id)
+        );
+
+        ownedBusinesses = Object.keys(ownedData)
+            .filter(id => validBusinessIds.has(id));
+
+        businesses.forEach(biz => {
+
+            biz.owned = ownedBusinesses.includes(biz.id);
+        });
+
+        renderBusinesses();
+
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+/*
+========================================
+READY STACKS
+========================================
+*/
+
+async function loadReadyBusinesses() {
+
+    if (!apiKey) return;
+
+    try {
+
+        const response = await fetch(
+            BUSINESS_STACKS_URL + '?key=' + apiKey
+        );
+
+        const json = await response.json();
+
+        const stackData = json?.data?.businesses || {};
+
+        const validBusinessIds = new Set(
+            businesses.map(b => b.id)
+        );
+
+        readyBusinesses = {};
+
+        Object.entries(stackData).forEach(([id, info]) => {
+
+            if (!validBusinessIds.has(id)) return;
+
+            readyBusinesses[id] = {
+                stacks: info.stacks || 0,
+                earnings: info.earnings || 0
+            };
+        });
+
+        businesses.forEach(biz => {
+
+            const stackInfo = readyBusinesses[biz.id];
+
+            biz.ready = !!stackInfo;
+            biz.stacks = stackInfo?.stacks || 0;
+            biz.earnings = stackInfo?.earnings || 0;
+        });
+
+        renderBusinesses();
+
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+/*
+========================================
+ROUTE GENERATION
+========================================
+*/
+
+function generateReadyRoute() {
+
+    routeBusinesses = businesses
+        .filter(b => b.owned && b.ready)
+        .sort((a, b) => b.earnings - a.earnings);
+
+    currentIndex = 0;
+
+    renderRoute();
+
+    if (routeBusinesses.length > 0) {
+        setWaypoint(currentIndex);
+    }
+}
+
+/*
+========================================
+WAYPOINTS
+========================================
+*/
+
+function setWaypoint(index) {
+
+    const biz = routeBusinesses[index];
+
+    if (!biz) return;
+
+    sendCommand({
+        type: 'setWaypoint',
         x: biz.x,
         y: biz.y
     });
 
-    updateUI();
-
     sendCommand({
-        type: "notification",
-        text: `Waypoint set: ${biz.name}`
+        type: 'notification',
+        text: 'Waypoint: ' + biz.name
     });
 
-    console.log("Waypoint set:", biz.name);
+    renderRoute();
 }
 
-/*
-    Go to next business
-*/
 function nextWaypoint() {
+
+    if (routeBusinesses.length === 0) return;
 
     currentIndex++;
 
-    if (currentIndex >= route.length) {
+    if (currentIndex >= routeBusinesses.length) {
         currentIndex = 0;
-
-        sendCommand({
-            type: "notification",
-            text: "Route restarted"
-        });
     }
 
-    setCurrentWaypoint();
+    setWaypoint(currentIndex);
 }
 
 /*
-    Close app
+========================================
+AUTO ADVANCE
+========================================
 */
-function closeApp() {
+
+function toggleAutoAdvance() {
+
+    autoAdvance = !autoAdvance;
+
     sendCommand({
-        type: "close"
+        type: 'notification',
+        text: 'Auto Advance ' + (autoAdvance ? 'ON' : 'OFF')
+    });
+}
+
+function checkArrival() {
+
+    if (!autoAdvance) return;
+
+    const biz = routeBusinesses[currentIndex];
+
+    if (!biz) return;
+
+    const distance = Math.sqrt(
+        (playerX - biz.x) ** 2 +
+        (playerY - biz.y) ** 2
+    );
+
+    if (distance <= ARRIVAL_DISTANCE) {
+
+        nextWaypoint();
+    }
+}
+
+/*
+========================================
+RENDER BUSINESSES
+========================================
+*/
+
+function renderBusinesses() {
+
+    const container = document.getElementById('businessList');
+
+    container.innerHTML = '';
+
+    businesses.forEach(biz => {
+
+        const div = document.createElement('div');
+
+        div.className = 'business';
+
+        let status = '';
+
+        if (biz.ready) {
+            status = '<span class="green">💰 Ready</span>';
+        }
+        else if (biz.owned) {
+            status = '<span class="blue">✓ Owned</span>';
+        }
+        else {
+            status = '<span class="yellow">🟡 Not Owned</span>';
+        }
+
+        div.innerHTML = `
+            <div class="business-name">${biz.name}</div>
+            <div class="small">${status}</div>
+            <div class="small">Stacks: ${biz.stacks || 0}</div>
+            <div class="small">Pending: $${Math.floor(biz.earnings || 0).toLocaleString()}</div>
+            <div class="small">Cost: ${biz.cost}</div>
+            <div class="small">Required Level: ${biz.requiredLevel}</div>
+        `;
+
+        div.onclick = () => {
+
+            sendCommand({
+                type: 'setWaypoint',
+                x: biz.x,
+                y: biz.y
+            });
+        };
+
+        container.appendChild(div);
+    });
+
+    document.getElementById('businessCount').innerText =
+        `${businesses.length} businesses loaded`;
+}
+
+/*
+========================================
+RENDER ROUTE
+========================================
+*/
+
+function renderRoute() {
+
+    const container = document.getElementById('routeBusinesses');
+
+    container.innerHTML = '';
+
+    routeBusinesses.forEach((biz, index) => {
+
+        const div = document.createElement('div');
+
+        div.className = 'business';
+
+        if (index === currentIndex) {
+            div.classList.add('route-active');
+        }
+
+        div.innerHTML = `
+            <div class="business-name">${biz.name}</div>
+            <div class="small green">💰 ${biz.stacks} stacks</div>
+            <div class="small">$${Math.floor(biz.earnings || 0).toLocaleString()}</div>
+        `;
+
+        container.appendChild(div);
+    });
+
+    document.getElementById('routeStatus').innerText =
+        routeBusinesses.length + ' businesses in route';
+
+    document.getElementById('routeProgress').innerText =
+        (currentIndex + 1) + ' / ' + routeBusinesses.length;
+}
+
+/*
+========================================
+RELOAD
+========================================
+*/
+
+async function reloadData() {
+
+    await loadBusinesses();
+    await loadOwnedBusinesses();
+    await loadReadyBusinesses();
+
+    sendCommand({
+        type: 'notification',
+        text: 'Reloaded TT data'
     });
 }
 
 /*
-    Update UI
+========================================
+TT DATA
+========================================
 */
-function updateUI() {
 
-    const biz = route[currentIndex];
-
-    document.getElementById("businessName").innerText =
-        `Current: ${biz.name}`;
-
-    document.getElementById("businessCoords").innerText =
-        `X: ${biz.x.toFixed(2)} | Y: ${biz.y.toFixed(2)}`;
-
-    document.getElementById("progress").innerText =
-        `${currentIndex + 1} / ${route.length}`;
-}
-
-/*
-    Listen for incoming TT data
-*/
-window.addEventListener("message", (event) => {
+window.addEventListener('message', (event) => {
 
     const data = event.data;
 
-    console.log("TT Data:", data);
+    if (!data || typeof data !== 'object') return;
 
-    /*
-        Future use:
-        - detect nearby business
-        - auto-next
-        - ownership
-        - player position
-    */
+    if (data.user_id) {
+
+        userId = data.user_id;
+
+        document.getElementById('userIdText').innerText = userId;
+    }
+
+    if (data.pkey && !apiKey) {
+
+        apiKey = data.pkey;
+
+        localStorage.setItem('tt_pkey', apiKey);
+
+        document.getElementById('apiStatus').innerText = 'Auto Loaded';
+    }
+
+    if (data.pos_x !== undefined) {
+        playerX = data.pos_x;
+    }
+
+    if (data.pos_y !== undefined) {
+        playerY = data.pos_y;
+    }
+
+    checkArrival();
 });
 
 /*
-    Init
+========================================
+INIT
+========================================
 */
-updateUI();
-setCurrentWaypoint();
+
+(async function init() {
+
+    document.getElementById('apiKeyInput').value = apiKey;
+
+    if (apiKey) {
+        document.getElementById('apiStatus').innerText = 'Loaded';
+    }
+
+    await loadBusinesses();
+
+    setTimeout(async () => {
+
+        await loadOwnedBusinesses();
+        await loadReadyBusinesses();
+
+    }, 2000);
+
+    sendCommand({
+        type: 'notification',
+        text: 'TT Companion Loaded'
+    });
+
+})();
 
 </script>
 
 </body>
 </html>
+```
+
+Notes:
+
+* The API URLs may need adjustment depending on TT's exact API structure.
+* The Lua parsing is intentionally simple for now.
+* The app is now structured enough to expand later.
+* Current features:
+
+  * Owned business detection
+  * Ready stack detection
+  * Route generation
+  * Auto advance
+  * Business browser
+  * API key saving
+  * Waypoint setting
