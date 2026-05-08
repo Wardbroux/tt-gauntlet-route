@@ -123,8 +123,8 @@ input {
 
 .business-list {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    grid-auto-rows: minmax(92px, auto);
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    grid-auto-rows: minmax(118px, auto);
     align-content: start;
     gap: 8px;
     min-height: 0;
@@ -132,8 +132,8 @@ input {
 }
 
 .business {
-    min-height: 92px;
-    padding: 8px;
+    min-height: 118px;
+    padding: 10px;
     border-radius: 8px;
     background: var(--panel);
     cursor: pointer;
@@ -146,13 +146,13 @@ input {
 .business-name {
     margin-bottom: 4px;
     font-weight: bold;
-    font-size: 12px;
+    font-size: 14px;
     line-height: 1.2;
 }
 
 .small {
-    font-size: 11px;
-    line-height: 1.25;
+    font-size: 12px;
+    line-height: 1.35;
     opacity: 0.82;
 }
 
@@ -427,6 +427,28 @@ function formatMoney(value) {
     return "$" + Math.floor(Number(value) || 0).toLocaleString();
 }
 
+function parseLuaCost(value) {
+    const expression = String(value || "").replace(/\s/g, "");
+    const powerMatch = /^(\d+(?:\.\d+)?)\*10\^(\d+)$/.exec(expression);
+
+    if (powerMatch) {
+        return Number(powerMatch[1]) * (10 ** Number(powerMatch[2]));
+    }
+
+    const number = Number(expression);
+    return Number.isFinite(number) ? number : null;
+}
+
+function formatCost(value) {
+    const parsedCost = parseLuaCost(value);
+
+    if (parsedCost === null) {
+        return String(value || "Unknown");
+    }
+
+    return formatMoney(parsedCost);
+}
+
 function clearChildren(element) {
     while (element.firstChild) {
         element.removeChild(element.firstChild);
@@ -495,6 +517,58 @@ function readLuaNumber(block, key) {
     return match ? Number.parseFloat(match[1]) : 0;
 }
 
+function stripLuaLineComments(text) {
+    return text
+        .split("\n")
+        .map((line) => {
+            const commentIndex = line.indexOf("--");
+            return commentIndex === -1 ? line : line.slice(0, commentIndex);
+        })
+        .join("\n");
+}
+
+function readLuaTypes(block) {
+    const types = [];
+    const regex = /type\s*=\s*"([^"]+)"/g;
+    let match;
+
+    while ((match = regex.exec(block)) !== null) {
+        if (!types.includes(match[1])) {
+            types.push(match[1]);
+        }
+    }
+
+    return types;
+}
+
+function readBusinessPoints(block) {
+    const points = [];
+    const pointRegex = /\{([^{}]*type\s*=\s*"[^"]+"[^{}]*x\s*=\s*[-\d.]+[^{}]*y\s*=\s*[-\d.]+[^{}]*)\}/g;
+    let match;
+
+    while ((match = pointRegex.exec(block)) !== null) {
+        const pointBlock = match[1];
+
+        points.push({
+            type: readLuaString(pointBlock, "type"),
+            name: readLuaString(pointBlock, "name"),
+            x: readLuaNumber(pointBlock, "x"),
+            y: readLuaNumber(pointBlock, "y")
+        });
+    }
+
+    return points;
+}
+
+function getCollectionPoint(points, fallback) {
+    const specialPoint = points.find((point) => point.type === "special");
+    return specialPoint || fallback;
+}
+
+function isCollectorOnlyBusiness(specialTypes) {
+    return specialTypes.includes("self_storage_train") && !specialTypes.includes("special");
+}
+
 function getTopLevelLuaObjects(text, tableName) {
     const tableStart = text.indexOf(tableName + " = {");
     const objects = [];
@@ -533,10 +607,17 @@ function getTopLevelLuaObjects(text, tableName) {
 }
 
 function parseBusinessConfig(text) {
-    const parsedBusinesses = getTopLevelLuaObjects(text, "BUSINESSES")
+    const uncommentedText = stripLuaLineComments(text);
+    const parsedBusinesses = getTopLevelLuaObjects(uncommentedText, "BUSINESSES")
         .map((block) => {
             const id = readLuaString(block, "id");
             const levelMatch = /reqlvl\s*=\s*\{"@business\.business\.>(\d+)"\}/.exec(block);
+            const specialTypes = readLuaTypes(block);
+            const businessPoint = {
+                x: readLuaNumber(block, "x"),
+                y: readLuaNumber(block, "y")
+            };
+            const collectionPoint = getCollectionPoint(readBusinessPoints(block), businessPoint);
 
             if (!id.startsWith("biz_") || !levelMatch) {
                 return null;
@@ -546,9 +627,12 @@ function parseBusinessConfig(text) {
                 name: readLuaString(block, "name"),
                 id,
                 cost: readLuaValue(block, "cost"),
+                collectorOnly: isCollectorOnlyBusiness(specialTypes),
                 requiredLevel: Number.parseInt(levelMatch[1], 10),
-                x: readLuaNumber(block, "x"),
-                y: readLuaNumber(block, "y"),
+                buyX: businessPoint.x,
+                buyY: businessPoint.y,
+                x: collectionPoint.x,
+                y: collectionPoint.y,
                 owned: false,
                 ready: false,
                 stacks: 0,
@@ -710,7 +794,7 @@ ROUTE GENERATION
 
 function generateReadyRoute() {
     state.routeBusinesses = getVisibleBusinesses()
-        .filter((business) => business.owned && business.ready)
+        .filter((business) => business.owned && business.ready && !business.collectorOnly)
         .sort((a, b) => b.earnings - a.earnings);
 
     state.currentIndex = 0;
@@ -820,10 +904,16 @@ function renderBusinesses() {
 
         row.appendChild(name);
         appendLine(row, status.text, status.className);
+        if (business.collectorOnly) {
+            appendLine(row, "Collector Only", "red");
+        }
         appendLine(row, "Stacks: " + (business.stacks || 0));
         appendLine(row, "Pending: " + formatMoney(business.earnings));
-        appendLine(row, "Cost: " + business.cost);
+        appendLine(row, "Cost: " + formatCost(business.cost));
         appendLine(row, "Required Level: " + business.requiredLevel);
+        if (business.buyX !== business.x || business.buyY !== business.y) {
+            appendLine(row, "Waypoint: Collection", "green");
+        }
 
         row.addEventListener("click", () => {
             sendCommand({
