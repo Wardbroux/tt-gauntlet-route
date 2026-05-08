@@ -28,13 +28,18 @@
 
 body {
     margin: 0;
+    min-height: 100vh;
     background: var(--bg);
     color: var(--text);
     font-family: Arial, sans-serif;
+    overflow: hidden;
 }
 
 .container {
-    padding: 16px;
+    display: flex;
+    min-height: 100vh;
+    padding: 8px;
+    flex-direction: column;
 }
 
 .app-header {
@@ -42,25 +47,26 @@ body {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 10px;
+    min-height: 34px;
+    margin-bottom: 6px;
 }
 
 h1 {
     margin: 0;
-    font-size: 24px;
+    font-size: 20px;
 }
 
 .tabs {
     display: flex;
-    gap: 10px;
-    margin-bottom: 15px;
+    gap: 8px;
+    margin-bottom: 8px;
 }
 
 button {
     width: 100%;
-    min-height: 42px;
-    padding: 10px 12px;
-    margin-top: 10px;
+    min-height: 34px;
+    padding: 8px 10px;
+    margin-top: 8px;
     border: 0;
     border-radius: 8px;
     background: var(--accent);
@@ -74,8 +80,9 @@ button:hover {
 }
 
 .icon-button {
-    width: 44px;
-    min-width: 44px;
+    width: 36px;
+    min-width: 36px;
+    min-height: 34px;
     margin-top: 0;
     padding: 0;
     background: var(--danger);
@@ -94,10 +101,14 @@ button:hover {
 
 .panel {
     display: none;
+    min-height: 0;
 }
 
 .panel.active {
-    display: block;
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
 }
 
 input {
@@ -111,13 +122,16 @@ input {
 }
 
 .business-list {
-    max-height: 500px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 8px;
+    min-height: 0;
     overflow-y: auto;
 }
 
 .business {
-    padding: 12px;
-    margin-bottom: 8px;
+    min-height: 106px;
+    padding: 9px;
     border-radius: 8px;
     background: var(--panel);
     cursor: pointer;
@@ -130,10 +144,12 @@ input {
 .business-name {
     margin-bottom: 4px;
     font-weight: bold;
+    font-size: 13px;
 }
 
 .small {
-    font-size: 13px;
+    font-size: 11px;
+    line-height: 1.25;
     opacity: 0.82;
 }
 
@@ -158,8 +174,8 @@ input {
 }
 
 .status-box {
-    padding: 12px;
-    margin-bottom: 12px;
+    padding: 9px;
+    margin-bottom: 8px;
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.05);
 }
@@ -289,7 +305,10 @@ CONFIG
 
 const API = {
     businessConfigUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/config/omni_businesses",
-    businessStacksUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/businesses.json",
+    businessStackUrls: [
+        "https://tt-proxy.thisisaproxy.workers.dev/main/status/businesses.json",
+        "https://tt-proxy.thisisaproxy.workers.dev/main/businesses.json"
+    ],
     userBusinessesUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/getuserbiz/"
 };
 
@@ -442,6 +461,21 @@ async function fetchJson(url, options) {
     return JSON.parse(text);
 }
 
+async function fetchFirstJson(urls, options) {
+    let lastError = null;
+
+    for (const url of urls) {
+        try {
+            return await fetchJson(url, options);
+        } catch (error) {
+            lastError = error;
+            console.warn("API request failed, trying fallback:", url, error);
+        }
+    }
+
+    throw lastError;
+}
+
 function buildTycoonHeaders() {
     const headers = {};
 
@@ -466,9 +500,15 @@ function parseBusinessConfig(text) {
     let match;
 
     while ((match = businessRegex.exec(text)) !== null) {
+        const id = match[2];
+
+        if (!id.startsWith("biz_")) {
+            continue;
+        }
+
         parsedBusinesses.push({
             name: match[1],
-            id: match[2],
+            id,
             cost: match[3].trim(),
             requiredLevel: Number.parseInt(match[4], 10),
             x: Number.parseFloat(match[5]),
@@ -549,7 +589,7 @@ async function loadReadyBusinesses() {
     }
 
     try {
-        const json = await fetchJson(API.businessStacksUrl, {
+        const json = await fetchFirstJson(API.businessStackUrls, {
             headers: buildTycoonHeaders()
         });
 
@@ -564,8 +604,14 @@ async function loadReadyBusinesses() {
                 return;
             }
 
+            const stacks = Number(info.stacks) || 0;
+
+            if (stacks <= 0) {
+                return;
+            }
+
             state.readyBusinessById[id] = {
-                stacks: Number(info.stacks) || 0,
+                stacks,
                 earnings: Number(info.earnings) || 0
             };
         });
