@@ -121,6 +121,79 @@ input {
     color: var(--text);
 }
 
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.toolbar button {
+    width: auto;
+    margin-top: 0;
+}
+
+select {
+    min-height: 34px;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: #222222;
+    color: var(--text);
+}
+
+.section-list {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+}
+
+.section {
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 38px;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+}
+
+.section-title {
+    flex: 1;
+    font-weight: bold;
+}
+
+.section-summary {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.section-action {
+    width: auto;
+    min-height: 30px;
+    margin-top: 0;
+    padding: 6px 10px;
+    background: #333333;
+    font-size: 12px;
+}
+
+.section.collapsed .business-list {
+    display: none;
+}
+
 .business-list {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -247,11 +320,17 @@ input {
             <div id="routeProgress" class="small"></div>
         </div>
 
-        <button id="generateRouteButton" type="button">Generate Ready Route</button>
-        <button id="nextWaypointButton" type="button">Next Waypoint</button>
-        <button id="autoAdvanceButton" type="button">Auto Advance: Off</button>
+        <div class="toolbar">
+            <select id="routeSortMode" aria-label="Route sorting">
+                <option value="payout">Highest payout</option>
+                <option value="distance">Shortest distance</option>
+            </select>
+            <button id="generateRouteButton" type="button">Generate Ready Route</button>
+            <button id="nextWaypointButton" type="button">Next Waypoint</button>
+            <button id="autoAdvanceButton" type="button">Auto Advance: Off</button>
+        </div>
 
-        <div id="routeBusinesses" class="business-list"></div>
+        <div id="routeSections" class="section-list"></div>
     </div>
 
     <div id="businesses" class="panel">
@@ -259,7 +338,7 @@ input {
             <div id="businessCount">0 businesses loaded</div>
         </div>
 
-        <div class="business-list" id="businessList"></div>
+        <div id="businessSections" class="section-list"></div>
     </div>
 
     <div id="settings" class="panel">
@@ -310,6 +389,7 @@ const API = {
     businessConfigUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/config/omni_businesses",
     endpointsUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/endpoints.json",
     businessStacksUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/businesses.json",
+    factionPerksUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/faction/perks.json",
     userBusinessesUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/getuserbiz/"
 };
 
@@ -335,6 +415,7 @@ const state = {
     businesses: [],
     ownedBusinessIds: [],
     readyBusinessById: {},
+    collectorWaypoint: null,
     routeBusinesses: [],
     currentIndex: 0,
     autoAdvance: false,
@@ -360,9 +441,10 @@ const elements = {
     panels: document.querySelectorAll(".panel"),
     routeStatus: document.getElementById("routeStatus"),
     routeProgress: document.getElementById("routeProgress"),
-    routeBusinesses: document.getElementById("routeBusinesses"),
+    routeSections: document.getElementById("routeSections"),
     businessCount: document.getElementById("businessCount"),
-    businessList: document.getElementById("businessList"),
+    businessSections: document.getElementById("businessSections"),
+    routeSortMode: document.getElementById("routeSortMode"),
     userIdText: document.getElementById("userIdText"),
     userNameText: document.getElementById("userNameText"),
     publicKeyStatus: document.getElementById("publicKeyStatus"),
@@ -427,6 +509,10 @@ function formatMoney(value) {
     return "$" + Math.floor(Number(value) || 0).toLocaleString();
 }
 
+function sumEarnings(businesses) {
+    return businesses.reduce((total, business) => total + (Number(business.earnings) || 0), 0);
+}
+
 function parseLuaCost(value) {
     const expression = String(value || "").replace(/\s/g, "");
     const powerMatch = /^(\d+(?:\.\d+)?)\*10\^(\d+)$/.exec(expression);
@@ -460,6 +546,59 @@ function appendLine(parent, text, className) {
     line.className = className ? "small " + className : "small";
     line.innerText = text;
     parent.appendChild(line);
+}
+
+function createSection(options) {
+    const section = document.createElement("div");
+    const header = document.createElement("div");
+    const title = document.createElement("span");
+    const summary = document.createElement("span");
+    const list = document.createElement("div");
+
+    section.className = "section";
+    header.className = "section-header";
+    header.setAttribute("role", "button");
+    header.tabIndex = 0;
+    title.className = "section-title";
+    summary.className = "section-summary";
+    list.className = "business-list";
+
+    title.innerText = options.title;
+    summary.innerText = options.summary || "";
+
+    header.appendChild(title);
+    header.appendChild(summary);
+
+    if (options.action) {
+        const actionButton = document.createElement("button");
+        actionButton.className = "section-action";
+        actionButton.type = "button";
+        actionButton.innerText = options.action.label;
+        actionButton.addEventListener("click", (event) => {
+            event.stopPropagation();
+            options.action.onClick();
+        });
+        header.appendChild(actionButton);
+    }
+
+    header.addEventListener("click", () => {
+        section.classList.toggle("collapsed");
+    });
+
+    header.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            section.classList.toggle("collapsed");
+        }
+    });
+
+    section.appendChild(header);
+    section.appendChild(list);
+
+    return {
+        section,
+        list
+    };
 }
 
 /*
@@ -560,6 +699,10 @@ function readBusinessPoints(block) {
     return points;
 }
 
+function findPointByType(block, type) {
+    return readBusinessPoints(block).find((point) => point.type === type) || null;
+}
+
 function getCollectionPoint(points, fallback) {
     const specialPoint = points.find((point) => point.type === "special");
     return specialPoint || fallback;
@@ -613,6 +756,7 @@ function parseBusinessConfig(text) {
             const id = readLuaString(block, "id");
             const levelMatch = /reqlvl\s*=\s*\{"@business\.business\.>(\d+)"\}/.exec(block);
             const specialTypes = readLuaTypes(block);
+            const bankCollectorPoint = findPointByType(block, "biz_collection");
             const businessPoint = {
                 x: readLuaNumber(block, "x"),
                 y: readLuaNumber(block, "y")
@@ -633,6 +777,7 @@ function parseBusinessConfig(text) {
                 buyY: businessPoint.y,
                 x: collectionPoint.x,
                 y: collectionPoint.y,
+                bankCollectorPoint,
                 owned: false,
                 ready: false,
                 stacks: 0,
@@ -657,6 +802,21 @@ function isCurrentBusiness(business) {
 
 function getVisibleBusinesses() {
     return state.businesses.filter(isCurrentBusiness);
+}
+
+function sortByLevelThenName(businesses) {
+    return businesses.slice().sort((a, b) => {
+        if (a.requiredLevel !== b.requiredLevel) {
+            return a.requiredLevel - b.requiredLevel;
+        }
+
+        return a.name.localeCompare(b.name);
+    });
+}
+
+function findBankCollectorPoint() {
+    const business = state.businesses.find((item) => item.bankCollectorPoint);
+    return business ? business.bankCollectorPoint : null;
 }
 
 function getValidBusinessIds() {
@@ -771,6 +931,51 @@ async function loadReadyBusinesses() {
     }
 }
 
+function getFactionPerks(responseData) {
+    if (Array.isArray(responseData) && Array.isArray(responseData[1])) {
+        return responseData[1];
+    }
+
+    if (responseData && Array.isArray(responseData.perks)) {
+        return responseData.perks;
+    }
+
+    return [];
+}
+
+function findFactionCollectorPoint(perks) {
+    return perks.find((perk) => {
+        const item = String(perk.item || "").toLowerCase();
+        return item.includes("collector") || item.includes("business");
+    }) || null;
+}
+
+async function loadFactionCollector() {
+    if (!state.privateKey) {
+        return;
+    }
+
+    state.collectorWaypoint = findBankCollectorPoint();
+
+    try {
+        const json = await fetchJson(API.factionPerksUrl, {
+            headers: buildTycoonHeaders()
+        });
+        const responseData = getResponseData(json);
+        const factionCollector = findFactionCollectorPoint(getFactionPerks(responseData));
+
+        if (factionCollector) {
+            state.collectorWaypoint = {
+                name: "Faction Collector",
+                x: Number(factionCollector.x),
+                y: Number(factionCollector.y)
+            };
+        }
+    } catch (error) {
+        console.warn("Faction collector unavailable, using bank collector if present:", error);
+    }
+}
+
 async function reloadData() {
     if (!state.initialized) {
         notify("Enter your private key first");
@@ -781,6 +986,7 @@ async function reloadData() {
     await loadBusinesses();
     await loadOwnedBusinesses();
     await loadReadyBusinesses();
+    await loadFactionCollector();
 
     renderRoute();
     notify("Reloaded TT data");
@@ -793,9 +999,12 @@ ROUTE GENERATION
 */
 
 function generateReadyRoute() {
-    state.routeBusinesses = getVisibleBusinesses()
-        .filter((business) => business.owned && business.ready && !business.collectorOnly)
-        .sort((a, b) => b.earnings - a.earnings);
+    const manualBusinesses = getReadyManualBusinesses();
+    const sortMode = elements.routeSortMode.value;
+
+    state.routeBusinesses = sortMode === "distance"
+        ? sortBusinessesByNearest(manualBusinesses, { x: state.playerX, y: state.playerY })
+        : manualBusinesses.sort((a, b) => b.earnings - a.earnings);
 
     state.currentIndex = 0;
     renderRoute();
@@ -805,6 +1014,44 @@ function generateReadyRoute() {
     } else {
         notify("No ready owned businesses found");
     }
+}
+
+function getReadyManualBusinesses() {
+    return getVisibleBusinesses().filter((business) => business.owned && business.ready && !business.collectorOnly);
+}
+
+function getReadyCollectorBusinesses() {
+    return getVisibleBusinesses().filter((business) => business.owned && business.ready && business.collectorOnly);
+}
+
+function getDistance(from, to) {
+    return Math.sqrt((from.x - to.x) ** 2 + (from.y - to.y) ** 2);
+}
+
+function sortBusinessesByNearest(businesses, startPoint) {
+    const remaining = businesses.slice();
+    const route = [];
+    let currentPoint = startPoint;
+
+    while (remaining.length > 0) {
+        let nearestIndex = 0;
+        let nearestDistance = getDistance(currentPoint, remaining[0]);
+
+        for (let index = 1; index < remaining.length; index++) {
+            const distance = getDistance(currentPoint, remaining[index]);
+
+            if (distance < nearestDistance) {
+                nearestIndex = index;
+                nearestDistance = distance;
+            }
+        }
+
+        const next = remaining.splice(nearestIndex, 1)[0];
+        route.push(next);
+        currentPoint = next;
+    }
+
+    return route;
 }
 
 function setWaypoint(index) {
@@ -838,6 +1085,21 @@ function toggleAutoAdvance() {
     state.autoAdvance = !state.autoAdvance;
     elements.autoAdvanceButton.innerText = "Auto Advance: " + (state.autoAdvance ? "On" : "Off");
     notify("Auto Advance " + (state.autoAdvance ? "ON" : "OFF"));
+}
+
+function setCollectorWaypoint() {
+    if (!state.collectorWaypoint) {
+        notify("No collector waypoint found");
+        return;
+    }
+
+    sendCommand({
+        type: "setWaypoint",
+        x: state.collectorWaypoint.x,
+        y: state.collectorWaypoint.y
+    });
+
+    notify("Waypoint: " + (state.collectorWaypoint.name || "Business Collector"));
 }
 
 function checkArrival() {
@@ -888,74 +1150,112 @@ function getBusinessStatus(business) {
     };
 }
 
-function renderBusinesses() {
-    clearChildren(elements.businessList);
+function createBusinessTile(business, options = {}) {
+    const status = getBusinessStatus(business);
+    const row = document.createElement("div");
+    const name = document.createElement("div");
 
-    const visibleBusinesses = getVisibleBusinesses();
+    row.className = "business";
+    name.className = "business-name";
+    name.innerText = business.name;
 
-    visibleBusinesses.forEach((business) => {
-        const status = getBusinessStatus(business);
-        const row = document.createElement("div");
-        const name = document.createElement("div");
+    row.appendChild(name);
 
-        row.className = "business";
-        name.className = "business-name";
-        name.innerText = business.name;
-
-        row.appendChild(name);
+    if (options.showStatus !== false) {
         appendLine(row, status.text, status.className);
-        if (business.collectorOnly) {
-            appendLine(row, "Collector Only", "red");
-        }
-        appendLine(row, "Stacks: " + (business.stacks || 0));
-        appendLine(row, "Pending: " + formatMoney(business.earnings));
-        appendLine(row, "Cost: " + formatCost(business.cost));
-        appendLine(row, "Required Level: " + business.requiredLevel);
-        if (business.buyX !== business.x || business.buyY !== business.y) {
-            appendLine(row, "Waypoint: Collection", "green");
-        }
+    }
 
-        row.addEventListener("click", () => {
-            sendCommand({
-                type: "setWaypoint",
-                x: business.x,
-                y: business.y
-            });
+    if (business.collectorOnly) {
+        appendLine(row, "Collector Only", "red");
+    }
+
+    appendLine(row, "Stacks: " + (business.stacks || 0));
+    appendLine(row, "Pending: " + formatMoney(business.earnings));
+    appendLine(row, "Cost: " + formatCost(business.cost));
+    appendLine(row, "Required Level: " + business.requiredLevel);
+
+    if (business.buyX !== business.x || business.buyY !== business.y) {
+        appendLine(row, "Waypoint: Collection", "green");
+    }
+
+    row.addEventListener("click", options.onClick || (() => {
+        sendCommand({
+            type: "setWaypoint",
+            x: business.x,
+            y: business.y
         });
+    }));
 
-        elements.businessList.appendChild(row);
+    return row;
+}
+
+function appendBusinessTiles(list, businesses, options) {
+    businesses.forEach((business) => {
+        list.appendChild(createBusinessTile(business, options));
+    });
+}
+
+function renderBusinesses() {
+    clearChildren(elements.businessSections);
+
+    const visibleBusinesses = sortByLevelThenName(getVisibleBusinesses());
+    const ownedBusinesses = visibleBusinesses.filter((business) => business.owned);
+    const notOwnedBusinesses = visibleBusinesses.filter((business) => !business.owned);
+    const ownedSection = createSection({
+        title: "Owned",
+        summary: ownedBusinesses.length + " businesses - " + formatMoney(sumEarnings(ownedBusinesses))
+    });
+    const notOwnedSection = createSection({
+        title: "Not Owned",
+        summary: notOwnedBusinesses.length + " businesses"
     });
 
+    appendBusinessTiles(ownedSection.list, ownedBusinesses);
+    appendBusinessTiles(notOwnedSection.list, notOwnedBusinesses);
+
+    elements.businessSections.appendChild(ownedSection.section);
+    elements.businessSections.appendChild(notOwnedSection.section);
     elements.businessCount.innerText = visibleBusinesses.length + " businesses loaded";
 }
 
 function renderRoute() {
-    clearChildren(elements.routeBusinesses);
+    clearChildren(elements.routeSections);
 
-    state.routeBusinesses.forEach((business, index) => {
-        const row = document.createElement("div");
-        const name = document.createElement("div");
+    const manualBusinesses = state.routeBusinesses.length > 0 ? state.routeBusinesses : getReadyManualBusinesses();
+    const collectorBusinesses = sortByLevelThenName(getReadyCollectorBusinesses());
+    const manualSection = createSection({
+        title: "Manual Collection",
+        summary: manualBusinesses.length + " businesses - " + formatMoney(sumEarnings(manualBusinesses))
+    });
+    const collectorSection = createSection({
+        title: "Collector Only",
+        summary: collectorBusinesses.length + " businesses - " + formatMoney(sumEarnings(collectorBusinesses)),
+        action: {
+            label: state.collectorWaypoint && state.collectorWaypoint.name === "Faction Collector" ? "Faction Collector" : "Bank Collector",
+            onClick: setCollectorWaypoint
+        }
+    });
 
-        row.className = "business";
+    manualBusinesses.forEach((business, index) => {
+        const row = createBusinessTile(business, {
+            showStatus: false,
+            onClick: () => {
+                state.currentIndex = index;
+                setWaypoint(index);
+            }
+        });
 
         if (index === state.currentIndex) {
             row.classList.add("route-active");
         }
 
-        name.className = "business-name";
-        name.innerText = business.name;
-
-        row.appendChild(name);
-        appendLine(row, business.stacks + " stacks", "green");
-        appendLine(row, formatMoney(business.earnings));
-
-        row.addEventListener("click", () => {
-            state.currentIndex = index;
-            setWaypoint(index);
-        });
-
-        elements.routeBusinesses.appendChild(row);
+        manualSection.list.appendChild(row);
     });
+
+    appendBusinessTiles(collectorSection.list, collectorBusinesses, { showStatus: false });
+
+    elements.routeSections.appendChild(manualSection.section);
+    elements.routeSections.appendChild(collectorSection.section);
 
     if (state.routeBusinesses.length === 0) {
         elements.routeStatus.innerText = "No route active";
@@ -1046,6 +1346,7 @@ async function startAppFunctions() {
     await loadBusinesses();
     await loadOwnedBusinesses();
     await loadReadyBusinesses();
+    await loadFactionCollector();
     renderBusinesses();
     renderRoute();
 }
@@ -1140,6 +1441,11 @@ function bindEvents() {
     document.getElementById("savePrivateKeyButton").addEventListener("click", savePrivateKey);
     document.getElementById("modalCloseButton").addEventListener("click", closeApp);
     document.getElementById("reloadDataButton").addEventListener("click", reloadData);
+    elements.routeSortMode.addEventListener("change", () => {
+        state.routeBusinesses = [];
+        state.currentIndex = 0;
+        renderRoute();
+    });
 
     elements.privateKeyInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
