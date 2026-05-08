@@ -251,8 +251,6 @@ input {
             <div>Private Key: <span id="privateKeyStatus">Missing</span></div>
         </div>
 
-        <input id="publicKeyInput" placeholder="Enter Public API Key" autocomplete="off" />
-        <button id="savePublicKeyButton" type="button">Save Public Key</button>
         <button id="reloadDataButton" type="button">Reload Data</button>
     </div>
 </div>
@@ -292,7 +290,7 @@ CONFIG
 const API = {
     businessConfigUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/config/omni_businesses",
     businessStacksUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/businesses.json",
-    userBusinessesUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/getuserbiz/"
+    userBusinessesUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/getuserbiz/"
 };
 
 const API_HEADERS = {
@@ -322,6 +320,7 @@ const state = {
     autoAdvance: false,
     initialized: false,
     identityReady: false,
+    appReadyForPrompt: false,
     userId: null,
     userName: null,
     playerX: 0,
@@ -347,7 +346,6 @@ const elements = {
     userIdText: document.getElementById("userIdText"),
     userNameText: document.getElementById("userNameText"),
     publicKeyStatus: document.getElementById("publicKeyStatus"),
-    publicKeyInput: document.getElementById("publicKeyInput"),
     privateKeyStatus: document.getElementById("privateKeyStatus"),
     privateKeyModal: document.getElementById("privateKeyModal"),
     privateKeyInput: document.getElementById("privateKeyInput"),
@@ -377,7 +375,7 @@ function notify(text) {
 function requestNamedData() {
     sendCommand({
         type: "getNamedData",
-        keys: ["user_id", "name", "pkey", "pos_x", "pos_y"]
+        keys: ["user_id", "name", "pkey", "pos_x", "pos_y", "focused", "hidden", "tabbed"]
     });
 }
 
@@ -774,14 +772,6 @@ SETTINGS
 ========================================
 */
 
-function savePublicKey() {
-    state.publicKey = elements.publicKeyInput.value.trim();
-    localStorage.setItem(STORAGE_KEYS.publicKey, state.publicKey);
-    setPublicKeyStatus(state.publicKey ? "Saved" : "Missing");
-    notify(state.publicKey ? "Public key saved" : "Public key cleared");
-    handleIdentityData();
-}
-
 function savePrivateKey() {
     state.privateKey = elements.privateKeyInput.value.trim();
 
@@ -814,6 +804,19 @@ function setUserName(userName) {
 
 function updateIdentityReady() {
     state.identityReady = !!(state.userId && state.userName && state.publicKey);
+}
+
+function updateAppPromptState(data) {
+    if (
+        data.focused === true ||
+        data.focused === "true" ||
+        data.tabbed === true ||
+        data.tabbed === "true" ||
+        data.hidden === false ||
+        data.hidden === "false"
+    ) {
+        state.appReadyForPrompt = true;
+    }
 }
 
 function updatePrivateKeyModalText() {
@@ -865,6 +868,10 @@ function handleIdentityData() {
         return;
     }
 
+    if (!state.appReadyForPrompt) {
+        return;
+    }
+
     showPrivateKeyModal();
 }
 
@@ -887,9 +894,10 @@ window.addEventListener("message", async (event) => {
     if (data.pkey && !state.publicKey) {
         state.publicKey = data.pkey;
         localStorage.setItem(STORAGE_KEYS.publicKey, state.publicKey);
-        elements.publicKeyInput.value = state.publicKey;
         setPublicKeyStatus("Auto Loaded");
     }
+
+    updateAppPromptState(data);
 
     if (data.pos_x !== undefined) {
         state.playerX = Number(data.pos_x) || 0;
@@ -928,7 +936,6 @@ function bindEvents() {
     document.getElementById("generateRouteButton").addEventListener("click", generateReadyRoute);
     document.getElementById("nextWaypointButton").addEventListener("click", nextWaypoint);
     document.getElementById("autoAdvanceButton").addEventListener("click", toggleAutoAdvance);
-    document.getElementById("savePublicKeyButton").addEventListener("click", savePublicKey);
     document.getElementById("savePrivateKeyButton").addEventListener("click", savePrivateKey);
     document.getElementById("modalCloseButton").addEventListener("click", closeApp);
     document.getElementById("reloadDataButton").addEventListener("click", reloadData);
@@ -943,7 +950,6 @@ function bindEvents() {
 async function init() {
     bindEvents();
 
-    elements.publicKeyInput.value = state.publicKey;
     setPublicKeyStatus(state.publicKey ? "Loaded" : "Missing");
     setPrivateKeyStatus(state.privateKey ? "Loaded" : "Missing");
 
