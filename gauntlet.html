@@ -348,20 +348,6 @@ select {
     background: var(--green);
 }
 
-.profit-display {
-    margin-top: 12px;
-    text-align: center;
-    font-size: 26px;
-    font-weight: bold;
-}
-
-.profit-display.positive {
-    color: var(--green);
-}
-
-.profit-display.negative {
-    color: var(--red);
-}
 </style>
 </head>
 
@@ -400,6 +386,18 @@ select {
     <div id="businesses" class="panel">
         <div class="status-box">
             <div id="businessCount">0 businesses loaded</div>
+        </div>
+
+        <div class="toolbar">
+            <select id="businessSortMode" aria-label="Business sorting">
+                <option value="level">Level Requirement</option>
+                <option value="name">Name</option>
+                <option value="cost">Cost</option>
+                <option value="daily">Estimated Daily</option>
+                <option value="payback">Payback Time</option>
+                <option value="earnings">Last Known Earnings</option>
+                <option value="bonuses">Ready Bonuses</option>
+            </select>
         </div>
 
         <div id="businessSections" class="section-list"></div>
@@ -473,6 +471,7 @@ const API_HEADERS = {
 };
 
 const STORAGE_KEYS = {
+    earningsByBusiness: "tt_business_earnings_by_id",
     privateKey: "tt_private_key",
     publicKey: "tt_pkey"
 };
@@ -522,6 +521,7 @@ const elements = {
     routeSections: document.getElementById("routeSections"),
     businessCount: document.getElementById("businessCount"),
     businessSections: document.getElementById("businessSections"),
+    businessSortMode: document.getElementById("businessSortMode"),
     routeSortMode: document.getElementById("routeSortMode"),
     userIdText: document.getElementById("userIdText"),
     userNameText: document.getElementById("userNameText"),
@@ -590,8 +590,30 @@ function formatMoney(value) {
     return "$" + Math.floor(Number(value) || 0).toLocaleString();
 }
 
-function sumEarnings(businesses) {
-    return businesses.reduce((total, business) => total + (Number(business.earnings) || 0), 0);
+function loadStoredJson(key, fallback) {
+    try {
+        return JSON.parse(localStorage.getItem(key)) || fallback;
+    } catch (error) {
+        return fallback;
+    }
+}
+
+function saveStoredJson(key, value) {
+    localStorage.setItem(key, JSON.stringify(value));
+}
+
+function getStoredEarnings() {
+    return loadStoredJson(STORAGE_KEYS.earningsByBusiness, {});
+}
+
+function updateStoredEarnings(id, earnings) {
+    if (earnings <= 0) {
+        return;
+    }
+
+    const storedEarnings = getStoredEarnings();
+    storedEarnings[id] = Math.max(Number(storedEarnings[id]) || 0, earnings);
+    saveStoredJson(STORAGE_KEYS.earningsByBusiness, storedEarnings);
 }
 
 function parseLuaCost(value) {
@@ -688,6 +710,10 @@ function getAverageEstimate(estimate) {
 
 function getEstimatedDailyIncome(business) {
     return getAverageEstimate(getCollectionEstimatePerBonus(business)) * 8;
+}
+
+function sumEstimatedDailyIncome(businesses) {
+    return businesses.reduce((total, business) => total + getEstimatedDailyIncome(business), 0);
 }
 
 function getPaybackDays(business) {
@@ -992,6 +1018,45 @@ function sortByLevelThenName(businesses) {
     });
 }
 
+function sortBusinessesForTab(businesses) {
+    const sortMode = elements.businessSortMode.value;
+    const sorted = businesses.slice();
+
+    sorted.sort((a, b) => {
+        if (sortMode === "name") {
+            return a.name.localeCompare(b.name);
+        }
+
+        if (sortMode === "cost") {
+            return (parseLuaCost(a.cost) || 0) - (parseLuaCost(b.cost) || 0);
+        }
+
+        if (sortMode === "daily") {
+            return getEstimatedDailyIncome(b) - getEstimatedDailyIncome(a);
+        }
+
+        if (sortMode === "payback") {
+            return (getPaybackDays(a) || Infinity) - (getPaybackDays(b) || Infinity);
+        }
+
+        if (sortMode === "earnings") {
+            return (Number(b.earnings) || 0) - (Number(a.earnings) || 0);
+        }
+
+        if (sortMode === "bonuses") {
+            return (Number(b.stacks) || 0) - (Number(a.stacks) || 0);
+        }
+
+        if (a.requiredLevel !== b.requiredLevel) {
+            return a.requiredLevel - b.requiredLevel;
+        }
+
+        return a.name.localeCompare(b.name);
+    });
+
+    return sorted;
+}
+
 function findBankCollectorPoint() {
     const business = state.businesses.find((item) => item.bankCollectorPoint);
     return business ? {
@@ -1012,6 +1077,7 @@ function getValidBusinessIds() {
 
 function syncBusinessFlags() {
     const ownedIds = new Set(state.ownedBusinessIds);
+    const storedEarnings = getStoredEarnings();
 
     state.businesses.forEach((business) => {
         const readyInfo = state.readyBusinessById[business.id];
@@ -1019,7 +1085,7 @@ function syncBusinessFlags() {
         business.owned = ownedIds.has(business.id);
         business.ready = !!readyInfo;
         business.stacks = readyInfo ? readyInfo.stacks : 0;
-        business.earnings = readyInfo ? readyInfo.earnings : 0;
+        business.earnings = Math.max(readyInfo ? readyInfo.earnings : 0, Number(storedEarnings[business.id]) || 0);
     });
 }
 
@@ -1088,6 +1154,9 @@ async function loadReadyBusinesses() {
             }
 
             const stacks = Number(info.stacks) || 0;
+            const earnings = Number(info.earnings) || 0;
+
+            updateStoredEarnings(id, earnings);
 
             if (stacks <= 0) {
                 return;
@@ -1095,7 +1164,7 @@ async function loadReadyBusinesses() {
 
             state.readyBusinessById[id] = {
                 stacks,
-                earnings: Number(info.earnings) || 0
+                earnings
             };
         });
 
@@ -1373,6 +1442,11 @@ function createBusinessTile(business, options = {}) {
     }
 
     appendLine(row, "Ready Bonuses: " + (business.stacks || 0));
+    appendLine(row, "Est. Daily: " + formatMoney(getEstimatedDailyIncome(business)));
+
+    if (business.earnings > 0 && options.showEarnings !== false) {
+        appendLine(row, "Last Known Earnings: " + formatMoney(business.earnings));
+    }
 
     if (options.showEstimate !== false) {
         const estimate = options.taxRate
@@ -1381,10 +1455,6 @@ function createBusinessTile(business, options = {}) {
         const estimateLabel = options.taxRate ? "Est. After Tax: " : "Est. Collection: ";
 
         appendLine(row, estimateLabel + formatEstimateRange(estimate));
-    }
-
-    if (options.showEarnings !== false) {
-        appendLine(row, "Total Earnings: " + formatMoney(business.earnings));
     }
 
     if (options.showCost !== false) {
@@ -1425,12 +1495,12 @@ function appendBusinessTiles(list, businesses, options) {
 function renderBusinesses() {
     clearChildren(elements.businessSections);
 
-    const visibleBusinesses = sortByLevelThenName(getVisibleBusinesses());
+    const visibleBusinesses = sortBusinessesForTab(getVisibleBusinesses());
     const ownedBusinesses = visibleBusinesses.filter((business) => business.owned);
     const notOwnedBusinesses = visibleBusinesses.filter((business) => !business.owned);
     const ownedSection = createSection({
         title: "Owned",
-        summary: ownedBusinesses.length + " businesses - " + formatMoney(sumEarnings(ownedBusinesses)) + " total earnings"
+        summary: ownedBusinesses.length + " businesses - " + formatMoney(sumEstimatedDailyIncome(ownedBusinesses)) + " est. daily"
     });
     const notOwnedSection = createSection({
         title: "Not Owned",
@@ -1490,7 +1560,6 @@ function renderRoute() {
         const row = createBusinessTile(business, {
             showStatus: false,
             showCost: false,
-            showEarnings: false,
             onClick: () => {
                 state.currentIndex = index;
                 setWaypoint(index);
@@ -1511,7 +1580,6 @@ function renderRoute() {
     appendBusinessTiles(collectorSection.list, collectorBusinesses, {
         showStatus: false,
         showCost: false,
-        showEarnings: false,
         taxRate: state.collectorTaxRate
     });
 
@@ -1645,23 +1713,10 @@ function appendGraph(parent, label, value, maxValue, valueText) {
     parent.appendChild(row);
 }
 
-function appendProfitDisplay(parent, profit) {
-    const display = document.createElement("div");
-
-    display.className = "profit-display " + (profit >= 0 ? "positive" : "negative");
-    display.innerText = (profit >= 0 ? "Profit: " : "Loss: ") + formatMoney(Math.abs(profit));
-    parent.appendChild(display);
-}
-
 function showBusinessDetail(business) {
     const cost = parseLuaCost(business.cost) || 0;
     const dailyIncome = getEstimatedDailyIncome(business);
     const paybackDays = getPaybackDays(business);
-    const earnings = Number(business.earnings) || 0;
-    const progress = business.owned && cost > 0 ? Math.min(cost, earnings) : 0;
-    const profit = business.owned ? earnings - cost : 0;
-    const remainingCost = Math.max(0, cost - earnings);
-    const remainingDays = dailyIncome > 0 ? remainingCost / dailyIncome : null;
     const perks = getVisiblePerks(business.perks);
     const perkList = document.createElement("div");
     const stats = document.createElement("div");
@@ -1675,9 +1730,9 @@ function showBusinessDetail(business) {
     appendLine(stats, "Cost: " + formatCost(business.cost));
     appendLine(stats, "Required Level: " + business.requiredLevel);
     appendLine(stats, "Estimated Daily: " + formatMoney(dailyIncome));
-    appendLine(stats, "Payback: " + (remainingCost <= 0 && business.owned ? "Paid back" : formatDays(paybackDays)));
-    if (business.owned) {
-        appendLine(stats, "Total Earnings: " + formatMoney(business.earnings));
+    appendLine(stats, "Estimated Payback: " + formatDays(paybackDays));
+    if (business.earnings > 0) {
+        appendLine(stats, "Last Known Earnings: " + formatMoney(business.earnings));
     }
 
     perkList.className = "perk-list";
@@ -1698,16 +1753,11 @@ function showBusinessDetail(business) {
     graphs.className = "status-box";
     appendGraph(
         graphs,
-        "Payback Progress",
-        cost - remainingCost,
+        "Estimated Payback",
+        dailyIncome,
         cost,
-        remainingCost <= 0 && business.owned
-            ? "Paid back"
-            : formatDays(remainingDays) + " left - " + formatMoney(remainingCost) + " remaining"
+        formatDays(paybackDays)
     );
-    if (business.owned) {
-        appendProfitDisplay(graphs, profit);
-    }
 
     elements.businessDetailBody.appendChild(stats);
     elements.businessDetailBody.appendChild(perkList);
@@ -1858,6 +1908,7 @@ function bindEvents() {
     document.getElementById("modalCloseButton").addEventListener("click", closeApp);
     document.getElementById("reloadDataButton").addEventListener("click", reloadData);
     document.getElementById("businessDetailCloseButton").addEventListener("click", hideBusinessDetail);
+    elements.businessSortMode.addEventListener("change", renderBusinesses);
     elements.routeSortMode.addEventListener("change", () => {
         state.routeBusinesses = [];
         state.currentIndex = 0;
