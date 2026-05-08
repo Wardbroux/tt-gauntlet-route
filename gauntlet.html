@@ -322,8 +322,8 @@ select {
 
         <div class="toolbar">
             <select id="routeSortMode" aria-label="Route sorting">
-                <option value="payout">Highest payout</option>
-                <option value="distance">Shortest distance</option>
+                <option value="earner">Highest Earner</option>
+                <option value="distance">Shortest Distance</option>
             </select>
             <button id="generateRouteButton" type="button">Generate Ready Route</button>
             <button id="nextWaypointButton" type="button">Next Waypoint</button>
@@ -418,6 +418,8 @@ const state = {
     collectorWaypoint: null,
     routeBusinesses: [],
     currentIndex: 0,
+    collectorStopPending: false,
+    collectorStopActive: false,
     autoAdvance: false,
     initialized: false,
     identityReady: false,
@@ -533,6 +535,63 @@ function formatCost(value) {
     }
 
     return formatMoney(parsedCost);
+}
+
+function getCollectionEstimatePerBonus(business) {
+    const cost = parseLuaCost(business.cost);
+
+    if (!cost || cost <= 0) {
+        return {
+            min: 0,
+            max: 0
+        };
+    }
+
+    const logBase = 10 * (10 ** 6);
+    const logExp = 3;
+    const logValue = (Math.log(cost) / Math.log(logBase)) ** logExp;
+
+    return {
+        min: Math.floor(cost / ((30 * 8) * logValue)),
+        max: Math.floor(cost / ((25 * 8) * logValue))
+    };
+}
+
+function getCollectionEstimate(business) {
+    const perBonus = getCollectionEstimatePerBonus(business);
+    const stacks = Number(business.stacks) || 0;
+
+    return {
+        min: perBonus.min * stacks,
+        max: perBonus.max * stacks
+    };
+}
+
+function sumReadyBonuses(businesses) {
+    return businesses.reduce((total, business) => total + (Number(business.stacks) || 0), 0);
+}
+
+function sumCollectionEstimate(businesses) {
+    return businesses.reduce((total, business) => {
+        const estimate = getCollectionEstimate(business);
+
+        return {
+            min: total.min + estimate.min,
+            max: total.max + estimate.max
+        };
+    }, { min: 0, max: 0 });
+}
+
+function formatEstimateRange(estimate) {
+    if (!estimate || (estimate.min <= 0 && estimate.max <= 0)) {
+        return "Unknown";
+    }
+
+    if (estimate.min === estimate.max) {
+        return formatMoney(estimate.min);
+    }
+
+    return formatMoney(estimate.min) + " - " + formatMoney(estimate.max);
 }
 
 function clearChildren(element) {
@@ -1000,19 +1059,24 @@ ROUTE GENERATION
 
 function generateReadyRoute() {
     const manualBusinesses = getReadyManualBusinesses();
+    const collectorBusinesses = getReadyCollectorBusinesses();
     const sortMode = elements.routeSortMode.value;
 
     state.routeBusinesses = sortMode === "distance"
         ? sortBusinessesByNearest(manualBusinesses, { x: state.playerX, y: state.playerY })
-        : manualBusinesses.sort((a, b) => b.earnings - a.earnings);
+        : manualBusinesses.sort((a, b) => getCollectionEstimate(b).max - getCollectionEstimate(a).max);
 
     state.currentIndex = 0;
-    renderRoute();
+    state.collectorStopPending = collectorBusinesses.length > 0;
+    state.collectorStopActive = false;
 
     if (state.routeBusinesses.length > 0) {
         setWaypoint(state.currentIndex);
+    } else if (state.collectorStopPending) {
+        setCollectorWaypoint(true);
     } else {
         notify("No ready owned businesses found");
+        renderRoute();
     }
 }
 
@@ -1072,12 +1136,40 @@ function setWaypoint(index) {
 }
 
 function nextWaypoint() {
+    if (state.collectorStopActive) {
+        state.collectorStopActive = false;
+        state.collectorStopPending = false;
+        state.currentIndex = 0;
+        state.routeBusinesses = [];
+        notify("Route complete");
+        renderRoute();
+        return;
+    }
+
     if (state.routeBusinesses.length === 0) {
+        if (state.collectorStopPending) {
+            setCollectorWaypoint(true);
+            return;
+        }
+
         notify("No active route");
         return;
     }
 
-    state.currentIndex = (state.currentIndex + 1) % state.routeBusinesses.length;
+    if (state.currentIndex >= state.routeBusinesses.length - 1) {
+        if (state.collectorStopPending) {
+            setCollectorWaypoint(true);
+            return;
+        }
+
+        state.currentIndex = 0;
+        state.routeBusinesses = [];
+        notify("Route complete");
+        renderRoute();
+        return;
+    }
+
+    state.currentIndex++;
     setWaypoint(state.currentIndex);
 }
 
@@ -1087,10 +1179,14 @@ function toggleAutoAdvance() {
     notify("Auto Advance " + (state.autoAdvance ? "ON" : "OFF"));
 }
 
-function setCollectorWaypoint() {
+function setCollectorWaypoint(asRouteStop = false) {
     if (!state.collectorWaypoint) {
         notify("No collector waypoint found");
         return;
+    }
+
+    if (asRouteStop) {
+        state.collectorStopActive = true;
     }
 
     sendCommand({
@@ -1104,6 +1200,23 @@ function setCollectorWaypoint() {
 
 function checkArrival() {
     if (!state.autoAdvance) {
+        return;
+    }
+
+    if (state.collectorStopActive) {
+        if (!state.collectorWaypoint) {
+            return;
+        }
+
+        const collectorDistance = Math.sqrt(
+            (state.playerX - state.collectorWaypoint.x) ** 2 +
+            (state.playerY - state.collectorWaypoint.y) ** 2
+        );
+
+        if (collectorDistance <= ARRIVAL_DISTANCE) {
+            nextWaypoint();
+        }
+
         return;
     }
 
@@ -1169,9 +1282,20 @@ function createBusinessTile(business, options = {}) {
         appendLine(row, "Collector Only", "red");
     }
 
-    appendLine(row, "Stacks: " + (business.stacks || 0));
-    appendLine(row, "Pending: " + formatMoney(business.earnings));
-    appendLine(row, "Cost: " + formatCost(business.cost));
+    appendLine(row, "Ready Bonuses: " + (business.stacks || 0));
+
+    if (options.showEstimate !== false) {
+        appendLine(row, "Est. Collection: " + formatEstimateRange(getCollectionEstimate(business)));
+    }
+
+    if (options.showEarnings !== false) {
+        appendLine(row, "Total Earnings: " + formatMoney(business.earnings));
+    }
+
+    if (options.showCost !== false) {
+        appendLine(row, "Cost: " + formatCost(business.cost));
+    }
+
     appendLine(row, "Required Level: " + business.requiredLevel);
 
     if (business.buyX !== business.x || business.buyY !== business.y) {
@@ -1203,7 +1327,7 @@ function renderBusinesses() {
     const notOwnedBusinesses = visibleBusinesses.filter((business) => !business.owned);
     const ownedSection = createSection({
         title: "Owned",
-        summary: ownedBusinesses.length + " businesses - " + formatMoney(sumEarnings(ownedBusinesses))
+        summary: ownedBusinesses.length + " businesses - " + formatMoney(sumEarnings(ownedBusinesses)) + " total earnings"
     });
     const notOwnedSection = createSection({
         title: "Not Owned",
@@ -1223,13 +1347,15 @@ function renderRoute() {
 
     const manualBusinesses = state.routeBusinesses.length > 0 ? state.routeBusinesses : getReadyManualBusinesses();
     const collectorBusinesses = sortByLevelThenName(getReadyCollectorBusinesses());
+    const manualEstimate = sumCollectionEstimate(manualBusinesses);
+    const collectorEstimate = sumCollectionEstimate(collectorBusinesses);
     const manualSection = createSection({
         title: "Manual Collection",
-        summary: manualBusinesses.length + " businesses - " + formatMoney(sumEarnings(manualBusinesses))
+        summary: manualBusinesses.length + " businesses - " + sumReadyBonuses(manualBusinesses) + " bonuses - est. " + formatEstimateRange(manualEstimate)
     });
     const collectorSection = createSection({
         title: "Collector Only",
-        summary: collectorBusinesses.length + " businesses - " + formatMoney(sumEarnings(collectorBusinesses)),
+        summary: collectorBusinesses.length + " businesses - " + sumReadyBonuses(collectorBusinesses) + " bonuses - est. " + formatEstimateRange(collectorEstimate),
         action: {
             label: state.collectorWaypoint && state.collectorWaypoint.name === "Faction Collector" ? "Faction Collector" : "Bank Collector",
             onClick: setCollectorWaypoint
@@ -1239,6 +1365,8 @@ function renderRoute() {
     manualBusinesses.forEach((business, index) => {
         const row = createBusinessTile(business, {
             showStatus: false,
+            showCost: false,
+            showEarnings: false,
             onClick: () => {
                 state.currentIndex = index;
                 setWaypoint(index);
@@ -1252,19 +1380,25 @@ function renderRoute() {
         manualSection.list.appendChild(row);
     });
 
-    appendBusinessTiles(collectorSection.list, collectorBusinesses, { showStatus: false });
+    appendBusinessTiles(collectorSection.list, collectorBusinesses, {
+        showStatus: false,
+        showCost: false,
+        showEarnings: false
+    });
 
     elements.routeSections.appendChild(manualSection.section);
     elements.routeSections.appendChild(collectorSection.section);
 
     if (state.routeBusinesses.length === 0) {
-        elements.routeStatus.innerText = "No route active";
+        elements.routeStatus.innerText = state.collectorStopActive ? "Collector stop active" : "No route active";
         elements.routeProgress.innerText = "";
         return;
     }
 
-    elements.routeStatus.innerText = state.routeBusinesses.length + " businesses in route";
-    elements.routeProgress.innerText = (state.currentIndex + 1) + " / " + state.routeBusinesses.length;
+    elements.routeStatus.innerText = state.routeBusinesses.length + " manual businesses in route";
+    elements.routeProgress.innerText = state.collectorStopActive
+        ? "Collector stop"
+        : (state.currentIndex + 1) + " / " + state.routeBusinesses.length + (state.collectorStopPending ? " + collector" : "");
 }
 
 /*
@@ -1444,6 +1578,8 @@ function bindEvents() {
     elements.routeSortMode.addEventListener("change", () => {
         state.routeBusinesses = [];
         state.currentIndex = 0;
+        state.collectorStopActive = false;
+        state.collectorStopPending = false;
         renderRoute();
     });
 
