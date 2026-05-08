@@ -6,11 +6,30 @@
 <title>TT Gauntlet Helper</title>
 
 <style>
+:root {
+    color-scheme: dark;
+    --bg: rgba(15, 15, 15, 0.96);
+    --panel: rgba(255, 255, 255, 0.06);
+    --panel-strong: rgba(255, 255, 255, 0.1);
+    --text: #ffffff;
+    --muted: rgba(255, 255, 255, 0.72);
+    --accent: #2d89ff;
+    --accent-hover: #4da0ff;
+    --danger: #ff4d4d;
+    --green: #66ff88;
+    --yellow: #ffd966;
+    --red: #ff7373;
+    --blue: #63b3ff;
+}
+
+* {
+    box-sizing: border-box;
+}
+
 body {
     margin: 0;
-    padding: 0;
-    background: rgba(15,15,15,0.96);
-    color: white;
+    background: var(--bg);
+    color: var(--text);
     font-family: Arial, sans-serif;
 }
 
@@ -18,8 +37,17 @@ body {
     padding: 16px;
 }
 
+.app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
 h1 {
-    margin-top: 0;
+    margin: 0;
+    font-size: 24px;
 }
 
 .tabs {
@@ -28,18 +56,40 @@ h1 {
     margin-bottom: 15px;
 }
 
+button {
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 12px;
+    margin-top: 10px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--accent);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 15px;
+}
+
+button:hover {
+    background: var(--accent-hover);
+}
+
+.icon-button {
+    width: 44px;
+    min-width: 44px;
+    margin-top: 0;
+    padding: 0;
+    background: var(--danger);
+    font-weight: bold;
+}
+
 .tab {
     flex: 1;
-    padding: 10px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    background: #333;
-    color: white;
+    margin-top: 0;
+    background: #333333;
 }
 
 .tab.active {
-    background: #2d89ff;
+    background: var(--accent);
 }
 
 .panel {
@@ -50,31 +100,14 @@ h1 {
     display: block;
 }
 
-button {
-    width: 100%;
-    padding: 12px;
-    margin-top: 10px;
-    border: none;
-    border-radius: 8px;
-    background: #2d89ff;
-    color: white;
-    cursor: pointer;
-    font-size: 15px;
-}
-
-button:hover {
-    background: #4da0ff;
-}
-
 input {
     width: 100%;
-    box-sizing: border-box;
     padding: 12px;
     margin-top: 10px;
+    border: 0;
     border-radius: 8px;
-    border: none;
-    background: #222;
-    color: white;
+    background: #222222;
+    color: var(--text);
 }
 
 .business-list {
@@ -85,155 +118,244 @@ input {
 .business {
     padding: 12px;
     margin-bottom: 8px;
-    border-radius: 10px;
-    background: rgba(255,255,255,0.06);
+    border-radius: 8px;
+    background: var(--panel);
+    cursor: pointer;
+}
+
+.business:hover {
+    background: var(--panel-strong);
 }
 
 .business-name {
-    font-weight: bold;
     margin-bottom: 4px;
+    font-weight: bold;
 }
 
 .small {
     font-size: 13px;
-    opacity: 0.8;
+    opacity: 0.82;
 }
 
 .green {
-    color: #66ff88;
+    color: var(--green);
 }
 
 .yellow {
-    color: #ffd966;
+    color: var(--yellow);
 }
 
 .red {
-    color: #ff7373;
+    color: var(--red);
 }
 
 .blue {
-    color: #63b3ff;
+    color: var(--blue);
 }
 
 .route-active {
-    border: 2px solid #2d89ff;
+    border: 2px solid var(--accent);
 }
 
 .status-box {
-    background: rgba(255,255,255,0.05);
     padding: 12px;
-    border-radius: 10px;
     margin-bottom: 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.72);
+    z-index: 10;
+}
+
+.modal-backdrop.active {
+    display: flex;
+}
+
+.modal {
+    width: min(420px, 100%);
+    padding: 16px;
+    border-radius: 8px;
+    background: #1f1f1f;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.modal-title {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.modal-copy {
+    margin: 0 0 10px;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.4;
 }
 </style>
 </head>
 
 <body>
-
 <div class="container">
+    <div class="app-header">
+        <h1>TT Gauntlet Helper</h1>
+        <button class="icon-button" id="closeButton" type="button" title="Close">X</button>
+    </div>
 
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-    <h1 style="margin:0;">TT Gauntlet Helper</h1>
-    <button onclick="closeApp()" style="width:auto;padding:10px 16px;background:#ff4d4d;">X</button>
-</div>
-
-    <div class="tabs">
-        <button class="tab active" onclick="switchTab('route')">Route</button>
-        <button class="tab" onclick="switchTab('businesses')">Businesses</button>
-        <button class="tab" onclick="switchTab('settings')">Settings</button>
+    <div class="tabs" role="tablist" aria-label="Gauntlet helper sections">
+        <button class="tab active" type="button" data-tab="route">Route</button>
+        <button class="tab" type="button" data-tab="businesses">Businesses</button>
+        <button class="tab" type="button" data-tab="settings">Settings</button>
     </div>
 
     <div id="route" class="panel active">
-
         <div class="status-box">
             <div id="routeStatus">No route active</div>
             <div id="routeProgress" class="small"></div>
         </div>
 
-        <button onclick="generateReadyRoute()">
-            Generate Ready Route
-        </button>
-
-        <button onclick="nextWaypoint()">
-            Next Waypoint
-        </button>
-
-        <button onclick="toggleAutoAdvance()">
-            Toggle Auto Advance
-        </button>
+        <button id="generateRouteButton" type="button">Generate Ready Route</button>
+        <button id="nextWaypointButton" type="button">Next Waypoint</button>
+        <button id="autoAdvanceButton" type="button">Auto Advance: Off</button>
 
         <div id="routeBusinesses" class="business-list"></div>
-
     </div>
 
     <div id="businesses" class="panel">
-
         <div class="status-box">
-            <div id="businessCount"></div>
+            <div id="businessCount">0 businesses loaded</div>
         </div>
 
         <div class="business-list" id="businessList"></div>
-
     </div>
 
     <div id="settings" class="panel">
-
         <div class="status-box">
             <div>User ID: <span id="userIdText">Unknown</span></div>
-            <div>API Key: <span id="apiStatus">Missing</span></div>
+            <div>Username: <span id="userNameText">Unknown</span></div>
+            <div>Public Key: <span id="publicKeyStatus">Missing</span></div>
+            <div>Private Key: <span id="privateKeyStatus">Missing</span></div>
         </div>
 
-        <input id="apiKeyInput" placeholder="Enter Public API Key" />
-
-        <button onclick="saveApiKey()">
-            Save API Key
-        </button>
-
-        <button onclick="reloadData()">
-            Reload Data
-        </button>
-
+        <input id="publicKeyInput" placeholder="Enter Public API Key" autocomplete="off" />
+        <button id="savePublicKeyButton" type="button">Save Public Key</button>
+        <button id="reloadDataButton" type="button">Reload Data</button>
     </div>
+</div>
 
+<div class="modal-backdrop" id="privateKeyModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="privateKeyTitle">
+        <div class="modal-header">
+            <div class="modal-title" id="privateKeyTitle">Welcome</div>
+            <button class="icon-button" id="modalCloseButton" type="button" title="Close">X</button>
+        </div>
+
+        <p class="modal-copy">
+            Welcome to TT Gauntlet Helper. Please input your private key here to start the app.
+        </p>
+        <p class="modal-copy">
+            If you need to grab it through the in-game chat command, close this window and reopen the app after copying it.
+        </p>
+
+        <div class="status-box">
+            <div>User ID: <span id="modalUserIdText">Unknown</span></div>
+            <div>Username: <span id="modalUserNameText">Unknown</span></div>
+            <div>Public Key: <span id="modalPublicKeyText">Missing</span></div>
+        </div>
+
+        <input id="privateKeyInput" type="password" placeholder="Enter Private API Key" autocomplete="off" />
+        <button id="savePrivateKeyButton" type="button">Start App</button>
+    </div>
 </div>
 
 <script>
-
 /*
 ========================================
 CONFIG
 ========================================
 */
 
-const BUSINESS_CONFIG_URL =
-    "https://tt-proxy.thisisaproxy.workers.dev/main/status/config/omni_businesses";
+const API = {
+    businessConfigUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/config/omni_businesses",
+    businessStacksUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/businesses.json",
+    userBusinessesUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/getuserbiz/"
+};
 
-const BUSINESS_STACKS_URL =
-    "https://tt-proxy.thisisaproxy.workers.dev/main/businesses.json";
+const API_HEADERS = {
+    privateKey: "X-Tycoon-Key",
+    publicKey: "X-Tycoon-Public-Key"
+};
 
-const USER_BIZ_URL =
-    "https://tt-proxy.thisisaproxy.workers.dev/main/@getuserbiz/";
+const STORAGE_KEYS = {
+    privateKey: "tt_private_key",
+    publicKey: "tt_pkey"
+};
 
 const ARRIVAL_DISTANCE = 60;
+
 /*
 ========================================
 STATE
 ========================================
 */
 
-let businesses = [];
-let ownedBusinesses = [];
-let readyBusinesses = {};
-let routeBusinesses = [];
+const state = {
+    businesses: [],
+    ownedBusinessIds: [],
+    readyBusinessById: {},
+    routeBusinesses: [],
+    currentIndex: 0,
+    autoAdvance: false,
+    initialized: false,
+    identityReady: false,
+    userId: null,
+    userName: null,
+    playerX: 0,
+    playerY: 0,
+    privateKey: sessionStorage.getItem(STORAGE_KEYS.privateKey) || "",
+    publicKey: localStorage.getItem(STORAGE_KEYS.publicKey) || ""
+};
 
-let currentIndex = 0;
-let autoAdvance = false;
+/*
+========================================
+ELEMENTS
+========================================
+*/
 
-let userId = null;
-let playerX = 0;
-let playerY = 0;
-
-let apiKey = localStorage.getItem("tt_pkey") || "";
+const elements = {
+    tabs: document.querySelectorAll(".tab"),
+    panels: document.querySelectorAll(".panel"),
+    routeStatus: document.getElementById("routeStatus"),
+    routeProgress: document.getElementById("routeProgress"),
+    routeBusinesses: document.getElementById("routeBusinesses"),
+    businessCount: document.getElementById("businessCount"),
+    businessList: document.getElementById("businessList"),
+    userIdText: document.getElementById("userIdText"),
+    userNameText: document.getElementById("userNameText"),
+    publicKeyStatus: document.getElementById("publicKeyStatus"),
+    publicKeyInput: document.getElementById("publicKeyInput"),
+    privateKeyStatus: document.getElementById("privateKeyStatus"),
+    privateKeyModal: document.getElementById("privateKeyModal"),
+    privateKeyInput: document.getElementById("privateKeyInput"),
+    modalUserIdText: document.getElementById("modalUserIdText"),
+    modalUserNameText: document.getElementById("modalUserNameText"),
+    modalPublicKeyText: document.getElementById("modalPublicKeyText"),
+    autoAdvanceButton: document.getElementById("autoAdvanceButton")
+};
 
 /*
 ========================================
@@ -245,209 +367,232 @@ function sendCommand(data) {
     window.parent.postMessage(data, "*");
 }
 
+function notify(text) {
+    sendCommand({
+        type: "notification",
+        text
+    });
+}
+
+function requestNamedData() {
+    sendCommand({
+        type: "getNamedData",
+        keys: ["user_id", "name", "pkey", "pos_x", "pos_y"]
+    });
+}
+
 /*
 ========================================
-TABS
+UI HELPERS
 ========================================
 */
 
 function switchTab(tabName) {
-
-    document.querySelectorAll('.panel').forEach(p => {
-        p.classList.remove('active');
+    elements.panels.forEach((panel) => {
+        panel.classList.toggle("active", panel.id === tabName);
     });
 
-    document.querySelectorAll('.tab').forEach(t => {
-        t.classList.remove('active');
+    elements.tabs.forEach((tab) => {
+        tab.classList.toggle("active", tab.dataset.tab === tabName);
     });
+}
 
-    document.getElementById(tabName).classList.add('active');
+function setPublicKeyStatus(text) {
+    elements.publicKeyStatus.innerText = text;
+}
 
-    event.target.classList.add('active');
+function setPrivateKeyStatus(text) {
+    elements.privateKeyStatus.innerText = text;
+}
+
+function formatMoney(value) {
+    return "$" + Math.floor(Number(value) || 0).toLocaleString();
+}
+
+function clearChildren(element) {
+    while (element.firstChild) {
+        element.removeChild(element.firstChild);
+    }
+}
+
+function appendLine(parent, text, className) {
+    const line = document.createElement("div");
+    line.className = className ? "small " + className : "small";
+    line.innerText = text;
+    parent.appendChild(line);
 }
 
 /*
 ========================================
-API KEY
+API HELPERS
 ========================================
 */
 
-function saveApiKey() {
+async function fetchText(url, options) {
+    const response = await fetch(url, options);
+    const text = await response.text();
 
-    apiKey = document.getElementById('apiKeyInput').value.trim();
+    if (!response.ok) {
+        throw new Error("Request failed (" + response.status + "): " + text);
+    }
 
-    localStorage.setItem('tt_pkey', apiKey);
+    return text;
+}
 
-    document.getElementById('apiStatus').innerText = 'Saved';
+async function fetchJson(url, options) {
+    const text = await fetchText(url, options);
+    return JSON.parse(text);
+}
 
-    sendCommand({
-        type: 'notification',
-        text: 'API key saved'
+function buildTycoonHeaders() {
+    const headers = {};
+
+    if (state.privateKey) {
+        headers[API_HEADERS.privateKey] = state.privateKey;
+    }
+
+    if (state.publicKey) {
+        headers[API_HEADERS.publicKey] = state.publicKey;
+    }
+
+    return headers;
+}
+
+function getResponseData(json) {
+    return json && json.data ? json.data : json;
+}
+
+function parseBusinessConfig(text) {
+    const businessRegex = /name = "([^"]+)"[\s\S]*?id = "([^"]+)"[\s\S]*?cost = ([^,]+)[\s\S]*?reqlvl = \{"@business\.business\.>(\d+)"\}[\s\S]*?position = \{[^}]*x = ([-\d.]+), y = ([-\d.]+)/g;
+    const parsedBusinesses = [];
+    let match;
+
+    while ((match = businessRegex.exec(text)) !== null) {
+        parsedBusinesses.push({
+            name: match[1],
+            id: match[2],
+            cost: match[3].trim(),
+            requiredLevel: Number.parseInt(match[4], 10),
+            x: Number.parseFloat(match[5]),
+            y: Number.parseFloat(match[6]),
+            owned: false,
+            ready: false,
+            stacks: 0,
+            earnings: 0
+        });
+    }
+
+    return parsedBusinesses;
+}
+
+function getValidBusinessIds() {
+    return new Set(state.businesses.map((business) => business.id));
+}
+
+function syncBusinessFlags() {
+    const ownedIds = new Set(state.ownedBusinessIds);
+
+    state.businesses.forEach((business) => {
+        const readyInfo = state.readyBusinessById[business.id];
+
+        business.owned = ownedIds.has(business.id);
+        business.ready = !!readyInfo;
+        business.stacks = readyInfo ? readyInfo.stacks : 0;
+        business.earnings = readyInfo ? readyInfo.earnings : 0;
     });
 }
 
 /*
 ========================================
-LOAD BUSINESS CONFIG
+DATA LOADING
 ========================================
 */
 
 async function loadBusinesses() {
-
     try {
+        const text = await fetchText(API.businessConfigUrl, {
+            headers: buildTycoonHeaders()
+        });
 
-        const response = await fetch(BUSINESS_CONFIG_URL);
-
-        const text = await response.text();
-
-        /*
-            VERY SIMPLE LUA PARSER
-            TEMPORARY
-        */
-
-        const regex = /name = "([^"]+)"[\s\S]*?id = "([^"]+)"[\s\S]*?cost = ([^,]+)[\s\S]*?reqlvl = \{"@business\.business\.>(\d+)"\}[\s\S]*?position = \{[^}]*x = ([\-\d\.]+), y = ([\-\d\.]+)/g;
-
-        businesses = [];
-
-        let match;
-
-        while ((match = regex.exec(text)) !== null) {
-
-            businesses.push({
-                name: match[1],
-                id: match[2],
-                cost: match[3],
-                requiredLevel: parseInt(match[4]),
-                x: parseFloat(match[5]),
-                y: parseFloat(match[6]),
-                owned: false,
-                ready: false
-            });
-        }
-
+        state.businesses = parseBusinessConfig(text);
+        syncBusinessFlags();
         renderBusinesses();
-
-    } catch (err) {
-        console.error(err);
+    } catch (error) {
+        console.error("loadBusinesses error:", error);
+        notify("Could not load business config");
     }
 }
-
-/*
-========================================
-OWNED BUSINESSES
-========================================
-*/
 
 async function loadOwnedBusinesses() {
-
-    if (!userId) return;
+    if (!state.userId || !state.privateKey) {
+        return;
+    }
 
     try {
-
-        console.log("FETCH URL:", USER_BIZ_URL + userId);
-
-        const response = await fetch(USER_BIZ_URL + userId);
-
-        const text = await response.text();
-
-        console.log("OWNED RAW:", text);
-
-        if (!response.ok) {
-            console.error("Owned business fetch failed");
-            return;
-        }
-
-        const json = JSON.parse(text);
-        
-        console.log("OWNED JSON:", json);
-
-        const ownedData = json?.data?.businesses || {};
-
-        const validBusinessIds = new Set(
-            businesses.map(b => b.id)
-        );
-
-        ownedBusinesses = Object.keys(ownedData)
-            .filter(id => validBusinessIds.has(id));
-
-        businesses.forEach(biz => {
-            biz.owned = ownedBusinesses.includes(biz.id);
+        const json = await fetchJson(API.userBusinessesUrl + encodeURIComponent(state.userId), {
+            headers: buildTycoonHeaders()
         });
+        const responseData = getResponseData(json);
+        const ownedData = responseData && responseData.businesses ? responseData.businesses : {};
+        const validBusinessIds = getValidBusinessIds();
 
-        console.log("Owned businesses:", ownedBusinesses.length);
-
+        state.ownedBusinessIds = Object.keys(ownedData).filter((id) => validBusinessIds.has(id));
+        syncBusinessFlags();
         renderBusinesses();
-
-    } catch (err) {
-        console.error("loadOwnedBusinesses error:", err);
+    } catch (error) {
+        console.error("loadOwnedBusinesses error:", error);
+        notify("Could not load owned businesses");
     }
 }
 
-/*
-========================================
-READY STACKS
-========================================
-*/
-
 async function loadReadyBusinesses() {
-
-    if (!apiKey) return;
+    if (!state.privateKey) {
+        return;
+    }
 
     try {
-
-        console.log("STACK FETCH");
-
-        const response = await fetch(BUSINESS_STACKS_URL, {
-            headers: {
-                "x-api-key": apiKey
-            }
+        const json = await fetchJson(API.businessStacksUrl, {
+            headers: buildTycoonHeaders()
         });
 
-        const text = await response.text();
+        const responseData = getResponseData(json);
+        const stackData = responseData && responseData.businesses ? responseData.businesses : {};
+        const validBusinessIds = getValidBusinessIds();
 
-        console.log("STACK RAW:", text);
-
-        if (!response.ok) {
-            console.error("Stack fetch failed");
-            return;
-        }
-
-        const json = JSON.parse(text);
-
-        const stackData = json?.data?.businesses || {};
-
-        const validBusinessIds = new Set(
-            businesses.map(b => b.id)
-        );
-
-        readyBusinesses = {};
+        state.readyBusinessById = {};
 
         Object.entries(stackData).forEach(([id, info]) => {
+            if (!validBusinessIds.has(id)) {
+                return;
+            }
 
-            if (!validBusinessIds.has(id)) return;
-
-            readyBusinesses[id] = {
-                stacks: info.stacks || 0,
-                earnings: info.earnings || 0
+            state.readyBusinessById[id] = {
+                stacks: Number(info.stacks) || 0,
+                earnings: Number(info.earnings) || 0
             };
         });
 
-        businesses.forEach(biz => {
-
-            const stackInfo = readyBusinesses[biz.id];
-
-            biz.ready = !!stackInfo;
-            biz.stacks = stackInfo?.stacks || 0;
-            biz.earnings = stackInfo?.earnings || 0;
-        });
-
-        console.log("Ready businesses:", Object.keys(readyBusinesses).length);
-
+        syncBusinessFlags();
         renderBusinesses();
-
-    } catch (err) {
-        console.error("loadReadyBusinesses error:", err);
+    } catch (error) {
+        console.error("loadReadyBusinesses error:", error);
+        notify("Could not load business stacks");
     }
+}
+
+async function reloadData() {
+    if (!state.initialized) {
+        notify("Enter your private key first");
+        showPrivateKeyModal();
+        return;
+    }
+
+    await loadBusinesses();
+    await loadOwnedBusinesses();
+    await loadReadyBusinesses();
+
+    renderRoute();
+    notify("Reloaded TT data");
 }
 
 /*
@@ -457,316 +602,359 @@ ROUTE GENERATION
 */
 
 function generateReadyRoute() {
-
-    routeBusinesses = businesses
-        .filter(b => b.owned && b.ready)
+    state.routeBusinesses = state.businesses
+        .filter((business) => business.owned && business.ready)
         .sort((a, b) => b.earnings - a.earnings);
 
-    currentIndex = 0;
-
+    state.currentIndex = 0;
     renderRoute();
 
-    if (routeBusinesses.length > 0) {
-        setWaypoint(currentIndex);
+    if (state.routeBusinesses.length > 0) {
+        setWaypoint(state.currentIndex);
+    } else {
+        notify("No ready owned businesses found");
     }
 }
 
-/*
-========================================
-WAYPOINTS
-========================================
-*/
-
 function setWaypoint(index) {
+    const business = state.routeBusinesses[index];
 
-    const biz = routeBusinesses[index];
-
-    if (!biz) return;
-
-    sendCommand({
-        type: 'setWaypoint',
-        x: biz.x,
-        y: biz.y
-    });
+    if (!business) {
+        return;
+    }
 
     sendCommand({
-        type: 'notification',
-        text: 'Waypoint: ' + biz.name
+        type: "setWaypoint",
+        x: business.x,
+        y: business.y
     });
 
+    notify("Waypoint: " + business.name);
     renderRoute();
 }
 
 function nextWaypoint() {
-
-    if (routeBusinesses.length === 0) return;
-
-    currentIndex++;
-
-    if (currentIndex >= routeBusinesses.length) {
-        currentIndex = 0;
+    if (state.routeBusinesses.length === 0) {
+        notify("No active route");
+        return;
     }
 
-    setWaypoint(currentIndex);
+    state.currentIndex = (state.currentIndex + 1) % state.routeBusinesses.length;
+    setWaypoint(state.currentIndex);
 }
 
-/*
-========================================
-AUTO ADVANCE
-========================================
-*/
-
 function toggleAutoAdvance() {
-
-    autoAdvance = !autoAdvance;
-
-    sendCommand({
-        type: 'notification',
-        text: 'Auto Advance ' + (autoAdvance ? 'ON' : 'OFF')
-    });
+    state.autoAdvance = !state.autoAdvance;
+    elements.autoAdvanceButton.innerText = "Auto Advance: " + (state.autoAdvance ? "On" : "Off");
+    notify("Auto Advance " + (state.autoAdvance ? "ON" : "OFF"));
 }
 
 function checkArrival() {
+    if (!state.autoAdvance) {
+        return;
+    }
 
-    if (!autoAdvance) return;
+    const business = state.routeBusinesses[state.currentIndex];
 
-    const biz = routeBusinesses[currentIndex];
-
-    if (!biz) return;
+    if (!business) {
+        return;
+    }
 
     const distance = Math.sqrt(
-        (playerX - biz.x) ** 2 +
-        (playerY - biz.y) ** 2
+        (state.playerX - business.x) ** 2 +
+        (state.playerY - business.y) ** 2
     );
 
     if (distance <= ARRIVAL_DISTANCE) {
-
         nextWaypoint();
     }
 }
 
 /*
 ========================================
-RENDER BUSINESSES
+RENDER
 ========================================
 */
+
+function getBusinessStatus(business) {
+    if (business.ready) {
+        return {
+            text: "Ready",
+            className: "green"
+        };
+    }
+
+    if (business.owned) {
+        return {
+            text: "Owned",
+            className: "blue"
+        };
+    }
+
+    return {
+        text: "Not Owned",
+        className: "yellow"
+    };
+}
 
 function renderBusinesses() {
+    clearChildren(elements.businessList);
 
-    const container = document.getElementById('businessList');
+    state.businesses.forEach((business) => {
+        const status = getBusinessStatus(business);
+        const row = document.createElement("div");
+        const name = document.createElement("div");
 
-    container.innerHTML = '';
+        row.className = "business";
+        name.className = "business-name";
+        name.innerText = business.name;
 
-    businesses.forEach(biz => {
+        row.appendChild(name);
+        appendLine(row, status.text, status.className);
+        appendLine(row, "Stacks: " + (business.stacks || 0));
+        appendLine(row, "Pending: " + formatMoney(business.earnings));
+        appendLine(row, "Cost: " + business.cost);
+        appendLine(row, "Required Level: " + business.requiredLevel);
 
-        const div = document.createElement('div');
-
-        div.className = 'business';
-
-        let status = '';
-
-        if (biz.ready) {
-            status = '<span class="green">💰 Ready</span>';
-        }
-        else if (biz.owned) {
-            status = '<span class="blue">✓ Owned</span>';
-        }
-        else {
-            status = '<span class="yellow">🟡 Not Owned</span>';
-        }
-
-        div.innerHTML = `
-            <div class="business-name">${biz.name}</div>
-            <div class="small">${status}</div>
-            <div class="small">Stacks: ${biz.stacks || 0}</div>
-            <div class="small">Pending: $${Math.floor(biz.earnings || 0).toLocaleString()}</div>
-            <div class="small">Cost: ${biz.cost}</div>
-            <div class="small">Required Level: ${biz.requiredLevel}</div>
-        `;
-
-        div.onclick = () => {
-
+        row.addEventListener("click", () => {
             sendCommand({
-                type: 'setWaypoint',
-                x: biz.x,
-                y: biz.y
+                type: "setWaypoint",
+                x: business.x,
+                y: business.y
             });
-        };
+        });
 
-        container.appendChild(div);
+        elements.businessList.appendChild(row);
     });
 
-    document.getElementById('businessCount').innerText =
-        `${businesses.length} businesses loaded`;
+    elements.businessCount.innerText = state.businesses.length + " businesses loaded";
 }
-
-/*
-========================================
-RENDER ROUTE
-========================================
-*/
 
 function renderRoute() {
+    clearChildren(elements.routeBusinesses);
 
-    const container = document.getElementById('routeBusinesses');
+    state.routeBusinesses.forEach((business, index) => {
+        const row = document.createElement("div");
+        const name = document.createElement("div");
 
-    container.innerHTML = '';
+        row.className = "business";
 
-    routeBusinesses.forEach((biz, index) => {
-
-        const div = document.createElement('div');
-
-        div.className = 'business';
-
-        if (index === currentIndex) {
-            div.classList.add('route-active');
+        if (index === state.currentIndex) {
+            row.classList.add("route-active");
         }
 
-        div.innerHTML = `
-            <div class="business-name">${biz.name}</div>
-            <div class="small green">💰 ${biz.stacks} stacks</div>
-            <div class="small">$${Math.floor(biz.earnings || 0).toLocaleString()}</div>
-        `;
+        name.className = "business-name";
+        name.innerText = business.name;
 
-        container.appendChild(div);
+        row.appendChild(name);
+        appendLine(row, business.stacks + " stacks", "green");
+        appendLine(row, formatMoney(business.earnings));
+
+        row.addEventListener("click", () => {
+            state.currentIndex = index;
+            setWaypoint(index);
+        });
+
+        elements.routeBusinesses.appendChild(row);
     });
 
-    document.getElementById('routeStatus').innerText =
-        routeBusinesses.length + ' businesses in route';
+    if (state.routeBusinesses.length === 0) {
+        elements.routeStatus.innerText = "No route active";
+        elements.routeProgress.innerText = "";
+        return;
+    }
 
-    document.getElementById('routeProgress').innerText =
-        (currentIndex + 1) + ' / ' + routeBusinesses.length;
+    elements.routeStatus.innerText = state.routeBusinesses.length + " businesses in route";
+    elements.routeProgress.innerText = (state.currentIndex + 1) + " / " + state.routeBusinesses.length;
 }
 
 /*
 ========================================
-RELOAD
+SETTINGS
 ========================================
 */
 
-async function reloadData() {
+function savePublicKey() {
+    state.publicKey = elements.publicKeyInput.value.trim();
+    localStorage.setItem(STORAGE_KEYS.publicKey, state.publicKey);
+    setPublicKeyStatus(state.publicKey ? "Saved" : "Missing");
+    notify(state.publicKey ? "Public key saved" : "Public key cleared");
+    handleIdentityData();
+}
+
+function savePrivateKey() {
+    state.privateKey = elements.privateKeyInput.value.trim();
+
+    if (!state.privateKey) {
+        notify("Private key is required");
+        return;
+    }
+
+    sessionStorage.setItem(STORAGE_KEYS.privateKey, state.privateKey);
+    setPrivateKeyStatus("Loaded");
+    hidePrivateKeyModal();
+    if (!state.identityReady) {
+        notify("Waiting for user data");
+        requestNamedData();
+        return;
+    }
+
+    startAppFunctions();
+}
+
+function setUserId(userId) {
+    state.userId = userId;
+    elements.userIdText.innerText = userId || "Unknown";
+}
+
+function setUserName(userName) {
+    state.userName = userName;
+    elements.userNameText.innerText = userName || "Unknown";
+}
+
+function updateIdentityReady() {
+    state.identityReady = !!(state.userId && state.userName && state.publicKey);
+}
+
+function updatePrivateKeyModalText() {
+    elements.modalUserIdText.innerText = state.userId || "Unknown";
+    elements.modalUserNameText.innerText = state.userName || "Unknown";
+    elements.modalPublicKeyText.innerText = state.publicKey ? "Loaded" : "Missing";
+}
+
+function showPrivateKeyModal() {
+    updatePrivateKeyModalText();
+    elements.privateKeyModal.classList.add("active");
+    elements.privateKeyInput.focus();
+}
+
+function hidePrivateKeyModal() {
+    elements.privateKeyModal.classList.remove("active");
+}
+
+async function startAppFunctions() {
+    if (!state.identityReady || !state.privateKey || state.initialized) {
+        return;
+    }
+
+    state.initialized = true;
 
     await loadBusinesses();
     await loadOwnedBusinesses();
-    //await loadReadyBusinesses();
-
-    sendCommand({
-        type: 'notification',
-        text: 'Reloaded TT data'
-    });
+    await loadReadyBusinesses();
+    renderBusinesses();
+    renderRoute();
 }
 
 /*
 ========================================
-TT DATA
+TT DATA EVENTS
 ========================================
 */
 
-let initialized = false;
+function handleIdentityData() {
+    updateIdentityReady();
+    updatePrivateKeyModalText();
 
-window.addEventListener('message', async (event) => {
-
-    const evt = event.data;
-
-    if (!evt || !evt.data) return;
-
-    const data = evt.data;
-
-    // Grab user ID once
-    if (data.user_id && !userId) {
-
-        userId = data.user_id;
-
-        console.log("USER ID FOUND:", userId);
-
-        const userText = document.getElementById('userIdText');
-
-        if (userText) {
-            userText.innerText = userId;
-        }
+    if (!state.identityReady || state.initialized) {
+        return;
     }
 
-    // Initialize app once user ID exists
-    if (userId && !initialized) {
-
-        initialized = true;
-
-        console.log("Initializing app...");
-
-        try {
-
-            await loadOwnedBusinesses();
-            //await loadReadyBusinesses();
-
-            renderBusinesses();
-
-            console.log("Initialization complete");
-
-        } catch (err) {
-
-            console.error("Initialization failed:", err);
-        }
+    if (state.privateKey) {
+        startAppFunctions();
+        return;
     }
 
-    if (data.pkey && !apiKey) {
+    showPrivateKeyModal();
+}
 
-        apiKey = data.pkey;
+window.addEventListener("message", async (event) => {
+    const payload = event.data;
+    const data = payload && payload.data ? payload.data : payload;
 
-        localStorage.setItem('tt_pkey', apiKey);
+    if (!data) {
+        return;
+    }
 
-        document.getElementById('apiStatus').innerText = 'Auto Loaded';
+    if (data.user_id && !state.userId) {
+        setUserId(data.user_id);
+    }
+
+    if (data.name && !state.userName) {
+        setUserName(data.name);
+    }
+
+    if (data.pkey && !state.publicKey) {
+        state.publicKey = data.pkey;
+        localStorage.setItem(STORAGE_KEYS.publicKey, state.publicKey);
+        elements.publicKeyInput.value = state.publicKey;
+        setPublicKeyStatus("Auto Loaded");
     }
 
     if (data.pos_x !== undefined) {
-        playerX = data.pos_x;
+        state.playerX = Number(data.pos_x) || 0;
     }
 
     if (data.pos_y !== undefined) {
-        playerY = data.pos_y;
+        state.playerY = Number(data.pos_y) || 0;
     }
 
+    handleIdentityData();
     checkArrival();
 });
 
-function closeApp() {
-
-    sendCommand({
-        type: 'close'
-    });
-
-    if (window.invokeNative) {
-        invokeNative('openUrl', 'about:blank');
-    }
-}
-
 /*
 ========================================
-INIT
+APP LIFECYCLE
 ========================================
 */
 
-(async function init() {
+function closeApp() {
+    sendCommand({
+        type: "close"
+    });
 
-    document.getElementById('apiKeyInput').value = apiKey;
-
-    if (apiKey) {
-        document.getElementById('apiStatus').innerText = 'Loaded';
+    if (window.invokeNative) {
+        window.invokeNative("openUrl", "about:blank");
     }
+}
 
-    await loadBusinesses();
-    
-    window.parent.postMessage({
-    type: 'getNamedData',
-    keys: ['user_id', 'pkey', 'pos_x', 'pos_y']
-}, '*');
-    
+function bindEvents() {
+    elements.tabs.forEach((tab) => {
+        tab.addEventListener("click", () => switchTab(tab.dataset.tab));
+    });
+
+    document.getElementById("closeButton").addEventListener("click", closeApp);
+    document.getElementById("generateRouteButton").addEventListener("click", generateReadyRoute);
+    document.getElementById("nextWaypointButton").addEventListener("click", nextWaypoint);
+    document.getElementById("autoAdvanceButton").addEventListener("click", toggleAutoAdvance);
+    document.getElementById("savePublicKeyButton").addEventListener("click", savePublicKey);
+    document.getElementById("savePrivateKeyButton").addEventListener("click", savePrivateKey);
+    document.getElementById("modalCloseButton").addEventListener("click", closeApp);
+    document.getElementById("reloadDataButton").addEventListener("click", reloadData);
+
+    elements.privateKeyInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            savePrivateKey();
+        }
+    });
+}
+
+async function init() {
+    bindEvents();
+
+    elements.publicKeyInput.value = state.publicKey;
+    setPublicKeyStatus(state.publicKey ? "Loaded" : "Missing");
+    setPrivateKeyStatus(state.privateKey ? "Loaded" : "Missing");
+
+    requestNamedData();
     renderBusinesses();
-    
-    console.log('TT Helper Loaded');
+    renderRoute();
 
-})();
+    console.log("TT Helper Loaded");
+}
 
+init();
 </script>
-
 </body>
 </html>
