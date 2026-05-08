@@ -123,15 +123,17 @@ input {
 
 .business-list {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-auto-rows: minmax(92px, auto);
+    align-content: start;
     gap: 8px;
     min-height: 0;
     overflow-y: auto;
 }
 
 .business {
-    min-height: 106px;
-    padding: 9px;
+    min-height: 92px;
+    padding: 8px;
     border-radius: 8px;
     background: var(--panel);
     cursor: pointer;
@@ -144,7 +146,8 @@ input {
 .business-name {
     margin-bottom: 4px;
     font-weight: bold;
-    font-size: 13px;
+    font-size: 12px;
+    line-height: 1.2;
 }
 
 .small {
@@ -305,10 +308,8 @@ CONFIG
 
 const API = {
     businessConfigUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/config/omni_businesses",
-    businessStackUrls: [
-        "https://tt-proxy.thisisaproxy.workers.dev/main/status/businesses.json",
-        "https://tt-proxy.thisisaproxy.workers.dev/main/businesses.json"
-    ],
+    endpointsUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/endpoints.json",
+    businessStacksUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/businesses.json",
     userBusinessesUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/getuserbiz/"
 };
 
@@ -461,21 +462,6 @@ async function fetchJson(url, options) {
     return JSON.parse(text);
 }
 
-async function fetchFirstJson(urls, options) {
-    let lastError = null;
-
-    for (const url of urls) {
-        try {
-            return await fetchJson(url, options);
-        } catch (error) {
-            lastError = error;
-            console.warn("API request failed, trying fallback:", url, error);
-        }
-    }
-
-    throw lastError;
-}
-
 function buildTycoonHeaders() {
     const headers = {};
 
@@ -494,37 +480,103 @@ function getResponseData(json) {
     return json && json.data ? json.data : json;
 }
 
-function parseBusinessConfig(text) {
-    const businessRegex = /name = "([^"]+)"[\s\S]*?id = "([^"]+)"[\s\S]*?cost = ([^,]+)[\s\S]*?reqlvl = \{"@business\.business\.>(\d+)"\}[\s\S]*?position = \{[^}]*x = ([-\d.]+), y = ([-\d.]+)/g;
-    const parsedBusinesses = [];
-    let match;
+function readLuaString(block, key) {
+    const match = new RegExp(key + '\\s*=\\s*"([^"]+)"').exec(block);
+    return match ? match[1] : "";
+}
 
-    while ((match = businessRegex.exec(text)) !== null) {
-        const id = match[2];
+function readLuaValue(block, key) {
+    const match = new RegExp(key + "\\s*=\\s*([^,\\n]+)").exec(block);
+    return match ? match[1].trim() : "";
+}
 
-        if (!id.startsWith("biz_")) {
-            continue;
-        }
+function readLuaNumber(block, key) {
+    const match = new RegExp(key + "\\s*=\\s*([-\\d.]+)").exec(block);
+    return match ? Number.parseFloat(match[1]) : 0;
+}
 
-        parsedBusinesses.push({
-            name: match[1],
-            id,
-            cost: match[3].trim(),
-            requiredLevel: Number.parseInt(match[4], 10),
-            x: Number.parseFloat(match[5]),
-            y: Number.parseFloat(match[6]),
-            owned: false,
-            ready: false,
-            stacks: 0,
-            earnings: 0
-        });
+function getTopLevelLuaObjects(text, tableName) {
+    const tableStart = text.indexOf(tableName + " = {");
+    const objects = [];
+
+    if (tableStart === -1) {
+        return objects;
     }
+
+    let depth = 0;
+    let objectStart = -1;
+
+    for (let index = tableStart; index < text.length; index++) {
+        const char = text[index];
+
+        if (char === "{") {
+            depth++;
+
+            if (depth === 2) {
+                objectStart = index;
+            }
+        } else if (char === "}") {
+            if (depth === 2 && objectStart !== -1) {
+                objects.push(text.slice(objectStart, index + 1));
+                objectStart = -1;
+            }
+
+            depth--;
+
+            if (depth === 0) {
+                break;
+            }
+        }
+    }
+
+    return objects;
+}
+
+function parseBusinessConfig(text) {
+    const parsedBusinesses = getTopLevelLuaObjects(text, "BUSINESSES")
+        .map((block) => {
+            const id = readLuaString(block, "id");
+            const levelMatch = /reqlvl\s*=\s*\{"@business\.business\.>(\d+)"\}/.exec(block);
+
+            if (!id.startsWith("biz_") || !levelMatch) {
+                return null;
+            }
+
+            return {
+                name: readLuaString(block, "name"),
+                id,
+                cost: readLuaValue(block, "cost"),
+                requiredLevel: Number.parseInt(levelMatch[1], 10),
+                x: readLuaNumber(block, "x"),
+                y: readLuaNumber(block, "y"),
+                owned: false,
+                ready: false,
+                stacks: 0,
+                earnings: 0
+            };
+        })
+        .filter(Boolean);
 
     return parsedBusinesses;
 }
 
+function isCurrentBusiness(business) {
+    return (
+        business &&
+        business.id &&
+        business.id.startsWith("biz_") &&
+        business.name &&
+        Number.isFinite(business.x) &&
+        Number.isFinite(business.y)
+    );
+}
+
+function getVisibleBusinesses() {
+    return state.businesses.filter(isCurrentBusiness);
+}
+
 function getValidBusinessIds() {
-    return new Set(state.businesses.map((business) => business.id));
+    return new Set(getVisibleBusinesses().map((business) => business.id));
 }
 
 function syncBusinessFlags() {
@@ -589,7 +641,7 @@ async function loadReadyBusinesses() {
     }
 
     try {
-        const json = await fetchFirstJson(API.businessStackUrls, {
+        const json = await fetchJson(API.businessStacksUrl, {
             headers: buildTycoonHeaders()
         });
 
@@ -620,6 +672,17 @@ async function loadReadyBusinesses() {
         renderBusinesses();
     } catch (error) {
         console.error("loadReadyBusinesses error:", error);
+
+        try {
+            const endpoints = await fetchJson(API.endpointsUrl, {
+                headers: buildTycoonHeaders()
+            });
+
+            console.log("Available API endpoints:", endpoints);
+        } catch (endpointError) {
+            console.error("Could not load endpoint list:", endpointError);
+        }
+
         notify("Could not load business stacks");
     }
 }
@@ -646,7 +709,7 @@ ROUTE GENERATION
 */
 
 function generateReadyRoute() {
-    state.routeBusinesses = state.businesses
+    state.routeBusinesses = getVisibleBusinesses()
         .filter((business) => business.owned && business.ready)
         .sort((a, b) => b.earnings - a.earnings);
 
@@ -744,7 +807,9 @@ function getBusinessStatus(business) {
 function renderBusinesses() {
     clearChildren(elements.businessList);
 
-    state.businesses.forEach((business) => {
+    const visibleBusinesses = getVisibleBusinesses();
+
+    visibleBusinesses.forEach((business) => {
         const status = getBusinessStatus(business);
         const row = document.createElement("div");
         const name = document.createElement("div");
@@ -771,7 +836,7 @@ function renderBusinesses() {
         elements.businessList.appendChild(row);
     });
 
-    elements.businessCount.innerText = state.businesses.length + " businesses loaded";
+    elements.businessCount.innerText = visibleBusinesses.length + " businesses loaded";
 }
 
 function renderRoute() {
