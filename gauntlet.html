@@ -350,6 +350,7 @@ select {
         </div>
 
         <button id="reloadDataButton" type="button">Reload Data</button>
+        <button id="debugFactionPerksButton" type="button">Debug Faction Perks</button>
     </div>
 </div>
 
@@ -416,6 +417,7 @@ const state = {
     ownedBusinessIds: [],
     readyBusinessById: {},
     collectorWaypoint: null,
+    collectorTaxRate: 0.3,
     routeBusinesses: [],
     currentIndex: 0,
     collectorStopPending: false,
@@ -580,6 +582,15 @@ function sumCollectionEstimate(businesses) {
             max: total.max + estimate.max
         };
     }, { min: 0, max: 0 });
+}
+
+function applyTaxToEstimate(estimate, taxRate) {
+    const multiplier = 1 - taxRate;
+
+    return {
+        min: Math.floor(estimate.min * multiplier),
+        max: Math.floor(estimate.max * multiplier)
+    };
 }
 
 function formatEstimateRange(estimate) {
@@ -875,7 +886,16 @@ function sortByLevelThenName(businesses) {
 
 function findBankCollectorPoint() {
     const business = state.businesses.find((item) => item.bankCollectorPoint);
-    return business ? business.bankCollectorPoint : null;
+    return business ? {
+        name: "Bank Collector",
+        x: business.bankCollectorPoint.x,
+        y: business.bankCollectorPoint.y,
+        source: "bank"
+    } : null;
+}
+
+function ownsBankCollector() {
+    return state.ownedBusinessIds.includes("biz_pacific_standard");
 }
 
 function getValidBusinessIds() {
@@ -1003,10 +1023,24 @@ function getFactionPerks(responseData) {
 }
 
 function findFactionCollectorPoint(perks) {
-    return perks.find((perk) => {
+    const collector = perks.find((perk) => {
         const item = String(perk.item || "").toLowerCase();
-        return item.includes("collector") || item.includes("business");
+        const data = String(perk.data || "").toLowerCase();
+
+        return (
+            item.includes("collector") ||
+            item.includes("biz_collection") ||
+            item.includes("business") ||
+            data.includes("collector") ||
+            data.includes("business")
+        );
     }) || null;
+
+    if (!collector) {
+        console.log("Faction perks found, but no collector-like perk matched:", perks.map((perk) => perk.item));
+    }
+
+    return collector;
 }
 
 async function loadFactionCollector() {
@@ -1014,7 +1048,14 @@ async function loadFactionCollector() {
         return;
     }
 
-    state.collectorWaypoint = findBankCollectorPoint();
+    const bankCollector = findBankCollectorPoint();
+    const bankOwned = ownsBankCollector();
+    state.collectorTaxRate = bankOwned ? 0.2 : 0.3;
+    state.collectorWaypoint = bankCollector;
+
+    if (bankOwned && bankCollector) {
+        return;
+    }
 
     try {
         const json = await fetchJson(API.factionPerksUrl, {
@@ -1027,11 +1068,49 @@ async function loadFactionCollector() {
             state.collectorWaypoint = {
                 name: "Faction Collector",
                 x: Number(factionCollector.x),
-                y: Number(factionCollector.y)
+                y: Number(factionCollector.y),
+                source: "faction"
             };
+            state.collectorTaxRate = 0.3;
         }
     } catch (error) {
         console.warn("Faction collector unavailable, using bank collector if present:", error);
+    }
+}
+
+async function debugFactionPerks() {
+    if (!state.privateKey) {
+        notify("Enter your private key first");
+        showPrivateKeyModal();
+        return;
+    }
+
+    try {
+        const json = await fetchJson(API.factionPerksUrl, {
+            headers: buildTycoonHeaders()
+        });
+        const responseData = getResponseData(json);
+        const perks = getFactionPerks(responseData);
+        const collector = findFactionCollectorPoint(perks);
+        const summary = perks.map((perk) => ({
+            item: perk.item,
+            x: perk.x,
+            y: perk.y,
+            data: perk.data
+        }));
+
+        console.log("Faction perks raw response:", json);
+        console.log("Faction perks parsed list:", summary);
+        console.log("Faction collector candidate:", collector);
+
+        if (collector) {
+            notify("Faction collector candidate: " + collector.item);
+        } else {
+            notify("No faction collector candidate found. Check console.");
+        }
+    } catch (error) {
+        console.error("debugFactionPerks error:", error);
+        notify("Faction perk debug failed");
     }
 }
 
@@ -1285,7 +1364,12 @@ function createBusinessTile(business, options = {}) {
     appendLine(row, "Ready Bonuses: " + (business.stacks || 0));
 
     if (options.showEstimate !== false) {
-        appendLine(row, "Est. Collection: " + formatEstimateRange(getCollectionEstimate(business)));
+        const estimate = options.taxRate
+            ? applyTaxToEstimate(getCollectionEstimate(business), options.taxRate)
+            : getCollectionEstimate(business);
+        const estimateLabel = options.taxRate ? "Est. After Tax: " : "Est. Collection: ";
+
+        appendLine(row, estimateLabel + formatEstimateRange(estimate));
     }
 
     if (options.showEarnings !== false) {
@@ -1303,10 +1387,13 @@ function createBusinessTile(business, options = {}) {
     }
 
     row.addEventListener("click", options.onClick || (() => {
+        const waypointX = options.waypointTarget === "buy" ? business.buyX : business.x;
+        const waypointY = options.waypointTarget === "buy" ? business.buyY : business.y;
+
         sendCommand({
             type: "setWaypoint",
-            x: business.x,
-            y: business.y
+            x: waypointX,
+            y: waypointY
         });
     }));
 
@@ -1334,8 +1421,8 @@ function renderBusinesses() {
         summary: notOwnedBusinesses.length + " businesses"
     });
 
-    appendBusinessTiles(ownedSection.list, ownedBusinesses);
-    appendBusinessTiles(notOwnedSection.list, notOwnedBusinesses);
+    appendBusinessTiles(ownedSection.list, ownedBusinesses, { waypointTarget: "buy" });
+    appendBusinessTiles(notOwnedSection.list, notOwnedBusinesses, { waypointTarget: "buy" });
 
     elements.businessSections.appendChild(ownedSection.section);
     elements.businessSections.appendChild(notOwnedSection.section);
@@ -1348,16 +1435,17 @@ function renderRoute() {
     const manualBusinesses = state.routeBusinesses.length > 0 ? state.routeBusinesses : getReadyManualBusinesses();
     const collectorBusinesses = sortByLevelThenName(getReadyCollectorBusinesses());
     const manualEstimate = sumCollectionEstimate(manualBusinesses);
-    const collectorEstimate = sumCollectionEstimate(collectorBusinesses);
+    const collectorEstimate = applyTaxToEstimate(sumCollectionEstimate(collectorBusinesses), state.collectorTaxRate);
+    const collectorTaxText = Math.round(state.collectorTaxRate * 100) + "% tax";
     const manualSection = createSection({
         title: "Manual Collection",
         summary: manualBusinesses.length + " businesses - " + sumReadyBonuses(manualBusinesses) + " bonuses - est. " + formatEstimateRange(manualEstimate)
     });
     const collectorSection = createSection({
         title: "Collector Only",
-        summary: collectorBusinesses.length + " businesses - " + sumReadyBonuses(collectorBusinesses) + " bonuses - est. " + formatEstimateRange(collectorEstimate),
+        summary: collectorBusinesses.length + " businesses - " + sumReadyBonuses(collectorBusinesses) + " bonuses - est. after " + collectorTaxText + " " + formatEstimateRange(collectorEstimate),
         action: {
-            label: state.collectorWaypoint && state.collectorWaypoint.name === "Faction Collector" ? "Faction Collector" : "Bank Collector",
+            label: state.collectorWaypoint ? state.collectorWaypoint.name : "Collector",
             onClick: setCollectorWaypoint
         }
     });
@@ -1383,7 +1471,8 @@ function renderRoute() {
     appendBusinessTiles(collectorSection.list, collectorBusinesses, {
         showStatus: false,
         showCost: false,
-        showEarnings: false
+        showEarnings: false,
+        taxRate: state.collectorTaxRate
     });
 
     elements.routeSections.appendChild(manualSection.section);
@@ -1575,6 +1664,7 @@ function bindEvents() {
     document.getElementById("savePrivateKeyButton").addEventListener("click", savePrivateKey);
     document.getElementById("modalCloseButton").addEventListener("click", closeApp);
     document.getElementById("reloadDataButton").addEventListener("click", reloadData);
+    document.getElementById("debugFactionPerksButton").addEventListener("click", debugFactionPerks);
     elements.routeSortMode.addEventListener("change", () => {
         state.routeBusinesses = [];
         state.currentIndex = 0;
