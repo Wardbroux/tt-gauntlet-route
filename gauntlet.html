@@ -1730,7 +1730,9 @@ function showBusinessDetail(business) {
     appendLine(stats, "Cost: " + formatCost(business.cost));
     appendLine(stats, "Required Level: " + business.requiredLevel);
     appendLine(stats, "Estimated Daily: " + formatMoney(dailyIncome));
-    appendLine(stats, "Estimated Payback: " + formatDays(paybackDays));
+    if (!business.owned || business.earnings <= 0) {
+        appendLine(stats, "Estimated Payback: " + formatDays(paybackDays));
+    }
     if (business.earnings > 0) {
         appendLine(stats, "Last Known Earnings: " + formatMoney(business.earnings));
     }
@@ -1751,13 +1753,26 @@ function showBusinessDetail(business) {
     }
 
     graphs.className = "status-box";
-    appendGraph(
-        graphs,
-        "Estimated Payback",
-        dailyIncome,
-        cost,
-        formatDays(paybackDays)
-    );
+    if (business.owned && business.earnings > 0) {
+        const remaining = Math.max(0, cost - business.earnings);
+        const profit = business.earnings - cost;
+
+        appendGraph(
+            graphs,
+            "Payback Progress",
+            Math.min(cost, business.earnings),
+            cost,
+            remaining <= 0 ? "Paid back - " + formatMoney(profit) + " profit" : formatMoney(remaining) + " remaining"
+        );
+    } else {
+        appendGraph(
+            graphs,
+            "Estimated Payback",
+            dailyIncome,
+            cost,
+            formatDays(paybackDays)
+        );
+    }
 
     elements.businessDetailBody.appendChild(stats);
     elements.businessDetailBody.appendChild(perkList);
