@@ -358,6 +358,8 @@ async function loadOwnedBusinesses() {
         }
 
         const json = JSON.parse(text);
+        
+        console.log("OWNED JSON:", json);
 
         const ownedData = json?.data?.businesses || {};
 
