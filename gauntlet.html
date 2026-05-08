@@ -249,6 +249,10 @@ select {
     border: 2px solid var(--accent);
 }
 
+.route-complete {
+    border: 2px solid var(--red);
+}
+
 .status-box {
     padding: 9px;
     margin-bottom: 8px;
@@ -279,6 +283,12 @@ select {
     box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
 }
 
+.modal.large {
+    width: min(760px, 100%);
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+}
+
 .modal-header {
     display: flex;
     align-items: center;
@@ -297,6 +307,45 @@ select {
     color: var(--muted);
     font-size: 14px;
     line-height: 1.4;
+}
+
+.perk-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.perk-item {
+    padding: 8px;
+    border-radius: 8px;
+    background: var(--panel);
+    font-size: 12px;
+}
+
+.graph-row {
+    margin-top: 8px;
+}
+
+.graph-label {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 4px;
+    font-size: 12px;
+}
+
+.graph-track {
+    height: 12px;
+    border-radius: 999px;
+    background: #222222;
+    overflow: hidden;
+}
+
+.graph-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--green);
 }
 </style>
 </head>
@@ -350,7 +399,6 @@ select {
         </div>
 
         <button id="reloadDataButton" type="button">Reload Data</button>
-        <button id="debugFactionPerksButton" type="button">Debug Faction Perks</button>
     </div>
 </div>
 
@@ -379,6 +427,17 @@ select {
     </div>
 </div>
 
+<div class="modal-backdrop" id="businessDetailModal">
+    <div class="modal large" role="dialog" aria-modal="true" aria-labelledby="businessDetailTitle">
+        <div class="modal-header">
+            <div class="modal-title" id="businessDetailTitle">Business</div>
+            <button class="icon-button" id="businessDetailCloseButton" type="button" title="Close">X</button>
+        </div>
+
+        <div id="businessDetailBody"></div>
+    </div>
+</div>
+
 <script>
 /*
 ========================================
@@ -390,7 +449,6 @@ const API = {
     businessConfigUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/config/omni_businesses",
     endpointsUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/endpoints.json",
     businessStacksUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/businesses.json",
-    factionPerksUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/faction/perks.json",
     userBusinessesUrl: "https://tt-proxy.thisisaproxy.workers.dev/main/status/getuserbiz/"
 };
 
@@ -418,6 +476,7 @@ const state = {
     readyBusinessById: {},
     collectorWaypoint: null,
     collectorTaxRate: 0.3,
+    selectedBusiness: null,
     routeBusinesses: [],
     currentIndex: 0,
     collectorStopPending: false,
@@ -458,6 +517,9 @@ const elements = {
     modalUserIdText: document.getElementById("modalUserIdText"),
     modalUserNameText: document.getElementById("modalUserNameText"),
     modalPublicKeyText: document.getElementById("modalPublicKeyText"),
+    businessDetailModal: document.getElementById("businessDetailModal"),
+    businessDetailTitle: document.getElementById("businessDetailTitle"),
+    businessDetailBody: document.getElementById("businessDetailBody"),
     autoAdvanceButton: document.getElementById("autoAdvanceButton")
 };
 
@@ -603,6 +665,33 @@ function formatEstimateRange(estimate) {
     }
 
     return formatMoney(estimate.min) + " - " + formatMoney(estimate.max);
+}
+
+function getAverageEstimate(estimate) {
+    return (estimate.min + estimate.max) / 2;
+}
+
+function getEstimatedDailyIncome(business) {
+    return getAverageEstimate(getCollectionEstimatePerBonus(business)) * 8;
+}
+
+function getPaybackDays(business) {
+    const cost = parseLuaCost(business.cost);
+    const dailyIncome = getEstimatedDailyIncome(business);
+
+    if (!cost || !dailyIncome) {
+        return null;
+    }
+
+    return cost / dailyIncome;
+}
+
+function formatDays(days) {
+    if (!Number.isFinite(days)) {
+        return "Unknown";
+    }
+
+    return days.toFixed(days >= 10 ? 0 : 1) + " days";
 }
 
 function clearChildren(element) {
@@ -761,6 +850,8 @@ function readBusinessPoints(block) {
         points.push({
             type: readLuaString(pointBlock, "type"),
             name: readLuaString(pointBlock, "name"),
+            vehicle: readLuaString(pointBlock, "vehicle"),
+            market: readLuaString(pointBlock, "market"),
             x: readLuaNumber(pointBlock, "x"),
             y: readLuaNumber(pointBlock, "y")
         });
@@ -826,12 +917,13 @@ function parseBusinessConfig(text) {
             const id = readLuaString(block, "id");
             const levelMatch = /reqlvl\s*=\s*\{"@business\.business\.>(\d+)"\}/.exec(block);
             const specialTypes = readLuaTypes(block);
+            const perkPoints = readBusinessPoints(block);
             const bankCollectorPoint = findPointByType(block, "biz_collection");
             const businessPoint = {
                 x: readLuaNumber(block, "x"),
                 y: readLuaNumber(block, "y")
             };
-            const collectionPoint = getCollectionPoint(readBusinessPoints(block), businessPoint);
+            const collectionPoint = getCollectionPoint(perkPoints, businessPoint);
 
             if (!id.startsWith("biz_") || !levelMatch) {
                 return null;
@@ -847,6 +939,7 @@ function parseBusinessConfig(text) {
                 buyY: businessPoint.y,
                 x: collectionPoint.x,
                 y: collectionPoint.y,
+                perks: perkPoints,
                 bankCollectorPoint,
                 owned: false,
                 ready: false,
@@ -1010,108 +1103,11 @@ async function loadReadyBusinesses() {
     }
 }
 
-function getFactionPerks(responseData) {
-    if (Array.isArray(responseData) && Array.isArray(responseData[1])) {
-        return responseData[1];
-    }
-
-    if (responseData && Array.isArray(responseData.perks)) {
-        return responseData.perks;
-    }
-
-    return [];
-}
-
-function findFactionCollectorPoint(perks) {
-    const collector = perks.find((perk) => {
-        const item = String(perk.item || "").toLowerCase();
-        const data = String(perk.data || "").toLowerCase();
-
-        return (
-            item.includes("collector") ||
-            item.includes("biz_collection") ||
-            item.includes("business") ||
-            data.includes("collector") ||
-            data.includes("business")
-        );
-    }) || null;
-
-    if (!collector) {
-        console.log("Faction perks found, but no collector-like perk matched:", perks.map((perk) => perk.item));
-    }
-
-    return collector;
-}
-
-async function loadFactionCollector() {
-    if (!state.privateKey) {
-        return;
-    }
-
+function loadCollectorWaypoint() {
     const bankCollector = findBankCollectorPoint();
     const bankOwned = ownsBankCollector();
     state.collectorTaxRate = bankOwned ? 0.2 : 0.3;
     state.collectorWaypoint = bankCollector;
-
-    if (bankOwned && bankCollector) {
-        return;
-    }
-
-    try {
-        const json = await fetchJson(API.factionPerksUrl, {
-            headers: buildTycoonHeaders()
-        });
-        const responseData = getResponseData(json);
-        const factionCollector = findFactionCollectorPoint(getFactionPerks(responseData));
-
-        if (factionCollector) {
-            state.collectorWaypoint = {
-                name: "Faction Collector",
-                x: Number(factionCollector.x),
-                y: Number(factionCollector.y),
-                source: "faction"
-            };
-            state.collectorTaxRate = 0.3;
-        }
-    } catch (error) {
-        console.warn("Faction collector unavailable, using bank collector if present:", error);
-    }
-}
-
-async function debugFactionPerks() {
-    if (!state.privateKey) {
-        notify("Enter your private key first");
-        showPrivateKeyModal();
-        return;
-    }
-
-    try {
-        const json = await fetchJson(API.factionPerksUrl, {
-            headers: buildTycoonHeaders()
-        });
-        const responseData = getResponseData(json);
-        const perks = getFactionPerks(responseData);
-        const collector = findFactionCollectorPoint(perks);
-        const summary = perks.map((perk) => ({
-            item: perk.item,
-            x: perk.x,
-            y: perk.y,
-            data: perk.data
-        }));
-
-        console.log("Faction perks raw response:", json);
-        console.log("Faction perks parsed list:", summary);
-        console.log("Faction collector candidate:", collector);
-
-        if (collector) {
-            notify("Faction collector candidate: " + collector.item);
-        } else {
-            notify("No faction collector candidate found. Check console.");
-        }
-    } catch (error) {
-        console.error("debugFactionPerks error:", error);
-        notify("Faction perk debug failed");
-    }
 }
 
 async function reloadData() {
@@ -1124,7 +1120,7 @@ async function reloadData() {
     await loadBusinesses();
     await loadOwnedBusinesses();
     await loadReadyBusinesses();
-    await loadFactionCollector();
+    loadCollectorWaypoint();
 
     renderRoute();
     notify("Reloaded TT data");
@@ -1386,7 +1382,12 @@ function createBusinessTile(business, options = {}) {
         appendLine(row, "Waypoint: Collection", "green");
     }
 
-    row.addEventListener("click", options.onClick || (() => {
+    row.addEventListener("click", () => {
+        if (options.onClick) {
+            options.onClick(business);
+            return;
+        }
+
         const waypointX = options.waypointTarget === "buy" ? business.buyX : business.x;
         const waypointY = options.waypointTarget === "buy" ? business.buyY : business.y;
 
@@ -1395,7 +1396,7 @@ function createBusinessTile(business, options = {}) {
             x: waypointX,
             y: waypointY
         });
-    }));
+    });
 
     return row;
 }
@@ -1421,8 +1422,28 @@ function renderBusinesses() {
         summary: notOwnedBusinesses.length + " businesses"
     });
 
-    appendBusinessTiles(ownedSection.list, ownedBusinesses, { waypointTarget: "buy" });
-    appendBusinessTiles(notOwnedSection.list, notOwnedBusinesses, { waypointTarget: "buy" });
+    appendBusinessTiles(ownedSection.list, ownedBusinesses, {
+        waypointTarget: "buy",
+        onClick: (business) => {
+            sendCommand({
+                type: "setWaypoint",
+                x: business.buyX,
+                y: business.buyY
+            });
+            showBusinessDetail(business);
+        }
+    });
+    appendBusinessTiles(notOwnedSection.list, notOwnedBusinesses, {
+        waypointTarget: "buy",
+        onClick: (business) => {
+            sendCommand({
+                type: "setWaypoint",
+                x: business.buyX,
+                y: business.buyY
+            });
+            showBusinessDetail(business);
+        }
+    });
 
     elements.businessSections.appendChild(ownedSection.section);
     elements.businessSections.appendChild(notOwnedSection.section);
@@ -1463,6 +1484,10 @@ function renderRoute() {
 
         if (index === state.currentIndex) {
             row.classList.add("route-active");
+        }
+
+        if (state.routeBusinesses.length > 0 && index < state.currentIndex) {
+            row.classList.add("route-complete");
         }
 
         manualSection.list.appendChild(row);
@@ -1526,6 +1551,100 @@ function setUserName(userName) {
     elements.userNameText.innerText = userName || "Unknown";
 }
 
+function getPerkLabel(perk) {
+    const labelParts = [perk.name || perk.type];
+
+    if (perk.market) {
+        labelParts.push(perk.market);
+    }
+
+    if (perk.vehicle) {
+        labelParts.push(perk.vehicle);
+    }
+
+    return labelParts.filter(Boolean).join(" - ");
+}
+
+function appendGraph(parent, label, value, maxValue, valueText) {
+    const row = document.createElement("div");
+    const labelRow = document.createElement("div");
+    const name = document.createElement("span");
+    const amount = document.createElement("span");
+    const track = document.createElement("div");
+    const fill = document.createElement("div");
+    const percent = maxValue > 0 ? Math.min(100, Math.max(0, (value / maxValue) * 100)) : 0;
+
+    row.className = "graph-row";
+    labelRow.className = "graph-label";
+    track.className = "graph-track";
+    fill.className = "graph-fill";
+    fill.style.width = percent + "%";
+
+    name.innerText = label;
+    amount.innerText = valueText;
+
+    labelRow.appendChild(name);
+    labelRow.appendChild(amount);
+    track.appendChild(fill);
+    row.appendChild(labelRow);
+    row.appendChild(track);
+    parent.appendChild(row);
+}
+
+function showBusinessDetail(business) {
+    const cost = parseLuaCost(business.cost) || 0;
+    const dailyIncome = getEstimatedDailyIncome(business);
+    const paybackDays = getPaybackDays(business);
+    const progress = business.owned && cost > 0 ? Math.min(cost, Number(business.earnings) || 0) : 0;
+    const perks = business.perks || [];
+    const perkList = document.createElement("div");
+    const stats = document.createElement("div");
+    const graphs = document.createElement("div");
+
+    state.selectedBusiness = business;
+    elements.businessDetailTitle.innerText = business.name;
+    clearChildren(elements.businessDetailBody);
+
+    stats.className = "status-box";
+    appendLine(stats, "Cost: " + formatCost(business.cost));
+    appendLine(stats, "Required Level: " + business.requiredLevel);
+    appendLine(stats, "Estimated Daily: " + formatMoney(dailyIncome));
+    appendLine(stats, "Payback: " + formatDays(paybackDays));
+    if (business.owned) {
+        appendLine(stats, "Total Earnings: " + formatMoney(business.earnings));
+    }
+
+    perkList.className = "perk-list";
+    if (perks.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "small";
+        empty.innerText = "No perks listed";
+        perkList.appendChild(empty);
+    } else {
+        perks.forEach((perk) => {
+            const perkItem = document.createElement("div");
+            perkItem.className = "perk-item";
+            perkItem.innerText = getPerkLabel(perk);
+            perkList.appendChild(perkItem);
+        });
+    }
+
+    graphs.className = "status-box";
+    appendGraph(graphs, "Payback Time", paybackDays ? Math.min(paybackDays, 100) : 0, 100, formatDays(paybackDays));
+    if (business.owned) {
+        appendGraph(graphs, "Earned Back", progress, cost, formatMoney(progress) + " / " + formatMoney(cost));
+    }
+
+    elements.businessDetailBody.appendChild(stats);
+    elements.businessDetailBody.appendChild(perkList);
+    elements.businessDetailBody.appendChild(graphs);
+    elements.businessDetailModal.classList.add("active");
+}
+
+function hideBusinessDetail() {
+    elements.businessDetailModal.classList.remove("active");
+}
+
 function updateIdentityReady() {
     state.identityReady = !!(state.userId && state.userName && state.publicKey);
 }
@@ -1569,7 +1688,7 @@ async function startAppFunctions() {
     await loadBusinesses();
     await loadOwnedBusinesses();
     await loadReadyBusinesses();
-    await loadFactionCollector();
+    loadCollectorWaypoint();
     renderBusinesses();
     renderRoute();
 }
@@ -1664,7 +1783,7 @@ function bindEvents() {
     document.getElementById("savePrivateKeyButton").addEventListener("click", savePrivateKey);
     document.getElementById("modalCloseButton").addEventListener("click", closeApp);
     document.getElementById("reloadDataButton").addEventListener("click", reloadData);
-    document.getElementById("debugFactionPerksButton").addEventListener("click", debugFactionPerks);
+    document.getElementById("businessDetailCloseButton").addEventListener("click", hideBusinessDetail);
     elements.routeSortMode.addEventListener("change", () => {
         state.routeBusinesses = [];
         state.currentIndex = 0;
