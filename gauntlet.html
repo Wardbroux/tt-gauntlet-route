@@ -348,6 +348,14 @@ select {
     background: var(--green);
 }
 
+.graph-value.positive {
+    color: var(--green);
+}
+
+.graph-value.negative {
+    color: var(--red);
+}
+
 </style>
 </head>
 
@@ -1442,7 +1450,10 @@ function createBusinessTile(business, options = {}) {
     }
 
     appendLine(row, "Ready Bonuses: " + (business.stacks || 0));
-    appendLine(row, "Est. Daily: " + formatMoney(getEstimatedDailyIncome(business)));
+
+    if (options.showDaily !== false) {
+        appendLine(row, "Est. Daily: " + formatMoney(getEstimatedDailyIncome(business)));
+    }
 
     if (business.earnings > 0 && options.showEarnings !== false) {
         appendLine(row, "Last Known Earnings: " + formatMoney(business.earnings));
@@ -1461,7 +1472,9 @@ function createBusinessTile(business, options = {}) {
         appendLine(row, "Cost: " + formatCost(business.cost));
     }
 
-    appendLine(row, "Required Level: " + business.requiredLevel);
+    if (options.showRequiredLevel !== false) {
+        appendLine(row, "Required Level: " + business.requiredLevel);
+    }
 
     if (business.buyX !== business.x || business.buyY !== business.y) {
         appendLine(row, "Waypoint: Collection", "green");
@@ -1560,6 +1573,9 @@ function renderRoute() {
         const row = createBusinessTile(business, {
             showStatus: false,
             showCost: false,
+            showDaily: false,
+            showEarnings: false,
+            showRequiredLevel: false,
             onClick: () => {
                 state.currentIndex = index;
                 setWaypoint(index);
@@ -1580,6 +1596,9 @@ function renderRoute() {
     appendBusinessTiles(collectorSection.list, collectorBusinesses, {
         showStatus: false,
         showCost: false,
+        showDaily: false,
+        showEarnings: false,
+        showRequiredLevel: false,
         taxRate: state.collectorTaxRate
     });
 
@@ -1687,7 +1706,7 @@ function getVisiblePerks(perks) {
     });
 }
 
-function appendGraph(parent, label, value, maxValue, valueText) {
+function appendGraph(parent, label, value, maxValue, valueText, valueClass) {
     const row = document.createElement("div");
     const labelRow = document.createElement("div");
     const name = document.createElement("span");
@@ -1704,6 +1723,7 @@ function appendGraph(parent, label, value, maxValue, valueText) {
 
     name.innerText = label;
     amount.innerText = valueText;
+    amount.className = valueClass ? "graph-value " + valueClass : "graph-value";
 
     labelRow.appendChild(name);
     labelRow.appendChild(amount);
@@ -1756,13 +1776,17 @@ function showBusinessDetail(business) {
     if (business.owned && business.earnings > 0) {
         const remaining = Math.max(0, cost - business.earnings);
         const profit = business.earnings - cost;
+        const remainingDays = dailyIncome > 0 ? remaining / dailyIncome : null;
 
         appendGraph(
             graphs,
             "Payback Progress",
             Math.min(cost, business.earnings),
             cost,
-            remaining <= 0 ? "Paid back - " + formatMoney(profit) + " profit" : formatMoney(remaining) + " remaining"
+            remaining <= 0
+                ? "Paid back - " + formatMoney(profit) + " profit"
+                : formatMoney(remaining) + " remaining - " + formatDays(remainingDays) + " left",
+            remaining <= 0 ? "positive" : "negative"
         );
     } else {
         appendGraph(
@@ -1770,7 +1794,8 @@ function showBusinessDetail(business) {
             "Estimated Payback",
             dailyIncome,
             cost,
-            formatDays(paybackDays)
+            formatDays(paybackDays),
+            "negative"
         );
     }
 
