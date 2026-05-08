@@ -347,6 +347,21 @@ select {
     width: 0%;
     background: var(--green);
 }
+
+.profit-display {
+    margin-top: 12px;
+    text-align: center;
+    font-size: 26px;
+    font-weight: bold;
+}
+
+.profit-display.positive {
+    color: var(--green);
+}
+
+.profit-display.negative {
+    color: var(--red);
+}
 </style>
 </head>
 
@@ -1555,7 +1570,9 @@ function getPerkLabel(perk) {
     const typeLabels = {
         atm: "ATM",
         biz_collection: "Business Collector",
+        chat: "Chat Prefix",
         garage: "Vehicle Garage",
+        group: "Group Unlock",
         helipad: "Helipad",
         marina: "Boat Garage",
         market: "Market",
@@ -1582,15 +1599,22 @@ function getPerkLabel(perk) {
 }
 
 function getVisiblePerks(perks) {
+    const seen = new Set();
+
     return (perks || []).filter((perk) => {
         if (perk.type === "special") {
             return false;
         }
 
-        if (perk.type === "chat" || perk.type === "group") {
+        const key = perk.type === "market"
+            ? perk.type + ":" + (perk.market || "")
+            : perk.type;
+
+        if (seen.has(key)) {
             return false;
         }
 
+        seen.add(key);
         return true;
     });
 }
@@ -1621,6 +1645,14 @@ function appendGraph(parent, label, value, maxValue, valueText) {
     parent.appendChild(row);
 }
 
+function appendProfitDisplay(parent, profit) {
+    const display = document.createElement("div");
+
+    display.className = "profit-display " + (profit >= 0 ? "positive" : "negative");
+    display.innerText = (profit >= 0 ? "Profit: " : "Loss: ") + formatMoney(Math.abs(profit));
+    parent.appendChild(display);
+}
+
 function showBusinessDetail(business) {
     const cost = parseLuaCost(business.cost) || 0;
     const dailyIncome = getEstimatedDailyIncome(business);
@@ -1646,7 +1678,6 @@ function showBusinessDetail(business) {
     appendLine(stats, "Payback: " + (remainingCost <= 0 && business.owned ? "Paid back" : formatDays(paybackDays)));
     if (business.owned) {
         appendLine(stats, "Total Earnings: " + formatMoney(business.earnings));
-        appendLine(stats, "Profit: " + formatMoney(profit));
     }
 
     perkList.className = "perk-list";
@@ -1665,10 +1696,17 @@ function showBusinessDetail(business) {
     }
 
     graphs.className = "status-box";
-    appendGraph(graphs, "Payback Progress", cost - remainingCost, cost, remainingCost <= 0 && business.owned ? "Paid back" : formatDays(remainingDays) + " left");
+    appendGraph(
+        graphs,
+        "Payback Progress",
+        cost - remainingCost,
+        cost,
+        remainingCost <= 0 && business.owned
+            ? "Paid back"
+            : formatDays(remainingDays) + " left - " + formatMoney(remainingCost) + " remaining"
+    );
     if (business.owned) {
-        appendGraph(graphs, "Earned Back", progress, cost, formatMoney(progress) + " / " + formatMoney(cost));
-        appendGraph(graphs, "Profit", Math.max(0, profit), Math.max(cost, profit), formatMoney(profit));
+        appendProfitDisplay(graphs, profit);
     }
 
     elements.businessDetailBody.appendChild(stats);
