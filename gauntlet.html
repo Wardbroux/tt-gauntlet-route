@@ -1552,7 +1552,23 @@ function setUserName(userName) {
 }
 
 function getPerkLabel(perk) {
-    const labelParts = [perk.name || perk.type];
+    const typeLabels = {
+        atm: "ATM",
+        biz_collection: "Business Collector",
+        garage: "Vehicle Garage",
+        helipad: "Helipad",
+        marina: "Boat Garage",
+        market: "Market",
+        marketplace: "Marketplace",
+        repair: "Repair Point",
+        self_storage: "Self Storage",
+        self_storage_train: "Train Network",
+        spawn: "Spawn Point",
+        special: "Business Bonus",
+        vehicle: "Vehicle Spawn",
+        fuel: "Fuel Station"
+    };
+    const labelParts = [typeLabels[perk.type] || perk.type || perk.name];
 
     if (perk.market) {
         labelParts.push(perk.market);
@@ -1563,6 +1579,20 @@ function getPerkLabel(perk) {
     }
 
     return labelParts.filter(Boolean).join(" - ");
+}
+
+function getVisiblePerks(perks) {
+    return (perks || []).filter((perk) => {
+        if (perk.type === "special") {
+            return false;
+        }
+
+        if (perk.type === "chat" || perk.type === "group") {
+            return false;
+        }
+
+        return true;
+    });
 }
 
 function appendGraph(parent, label, value, maxValue, valueText) {
@@ -1595,8 +1625,12 @@ function showBusinessDetail(business) {
     const cost = parseLuaCost(business.cost) || 0;
     const dailyIncome = getEstimatedDailyIncome(business);
     const paybackDays = getPaybackDays(business);
-    const progress = business.owned && cost > 0 ? Math.min(cost, Number(business.earnings) || 0) : 0;
-    const perks = business.perks || [];
+    const earnings = Number(business.earnings) || 0;
+    const progress = business.owned && cost > 0 ? Math.min(cost, earnings) : 0;
+    const profit = business.owned ? earnings - cost : 0;
+    const remainingCost = Math.max(0, cost - earnings);
+    const remainingDays = dailyIncome > 0 ? remainingCost / dailyIncome : null;
+    const perks = getVisiblePerks(business.perks);
     const perkList = document.createElement("div");
     const stats = document.createElement("div");
     const graphs = document.createElement("div");
@@ -1609,9 +1643,10 @@ function showBusinessDetail(business) {
     appendLine(stats, "Cost: " + formatCost(business.cost));
     appendLine(stats, "Required Level: " + business.requiredLevel);
     appendLine(stats, "Estimated Daily: " + formatMoney(dailyIncome));
-    appendLine(stats, "Payback: " + formatDays(paybackDays));
+    appendLine(stats, "Payback: " + (remainingCost <= 0 && business.owned ? "Paid back" : formatDays(paybackDays)));
     if (business.owned) {
         appendLine(stats, "Total Earnings: " + formatMoney(business.earnings));
+        appendLine(stats, "Profit: " + formatMoney(profit));
     }
 
     perkList.className = "perk-list";
@@ -1630,9 +1665,10 @@ function showBusinessDetail(business) {
     }
 
     graphs.className = "status-box";
-    appendGraph(graphs, "Payback Time", paybackDays ? Math.min(paybackDays, 100) : 0, 100, formatDays(paybackDays));
+    appendGraph(graphs, "Payback Progress", cost - remainingCost, cost, remainingCost <= 0 && business.owned ? "Paid back" : formatDays(remainingDays) + " left");
     if (business.owned) {
         appendGraph(graphs, "Earned Back", progress, cost, formatMoney(progress) + " / " + formatMoney(cost));
+        appendGraph(graphs, "Profit", Math.max(0, profit), Math.max(cost, profit), formatMoney(profit));
     }
 
     elements.businessDetailBody.appendChild(stats);
