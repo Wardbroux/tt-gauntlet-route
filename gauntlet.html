@@ -507,6 +507,7 @@ const state = {
     initialized: false,
     identityReady: false,
     appReadyForPrompt: false,
+    initialPinHandled: false,
     userId: null,
     userName: null,
     playerX: 0,
@@ -1449,7 +1450,9 @@ function createBusinessTile(business, options = {}) {
         appendLine(row, "Collector Only", "red");
     }
 
-    appendLine(row, "Ready Bonuses: " + (business.stacks || 0));
+    if (options.showBonuses !== false) {
+        appendLine(row, "Ready Bonuses: " + (business.stacks || 0));
+    }
 
     if (options.showDaily !== false) {
         appendLine(row, "Est. Daily: " + formatMoney(getEstimatedDailyIncome(business)));
@@ -1522,6 +1525,8 @@ function renderBusinesses() {
 
     appendBusinessTiles(ownedSection.list, ownedBusinesses, {
         waypointTarget: "buy",
+        showBonuses: false,
+        showEstimate: false,
         onClick: (business) => {
             sendCommand({
                 type: "setWaypoint",
@@ -1533,6 +1538,8 @@ function renderBusinesses() {
     });
     appendBusinessTiles(notOwnedSection.list, notOwnedBusinesses, {
         waypointTarget: "buy",
+        showBonuses: false,
+        showEstimate: false,
         onClick: (business) => {
             sendCommand({
                 type: "setWaypoint",
@@ -1813,15 +1820,37 @@ function updateIdentityReady() {
     state.identityReady = !!(state.userId && state.userName && state.publicKey);
 }
 
+function isDataTrue(value) {
+    return value === true || value === "true" || value === 1 || value === "1";
+}
+
+function pinApp() {
+    sendCommand({
+        type: "pin"
+    });
+}
+
+function updateAppOpenState(data) {
+    if (data.focused === undefined && data.tabbed === undefined && data.hidden === undefined) {
+        return;
+    }
+
+    if (isDataTrue(data.focused) || isDataTrue(data.tabbed)) {
+        state.appReadyForPrompt = true;
+        return;
+    }
+
+    hidePrivateKeyModal();
+    hideBusinessDetail();
+
+    if (!state.initialPinHandled) {
+        state.initialPinHandled = true;
+        pinApp();
+    }
+}
+
 function updateAppPromptState(data) {
-    if (
-        data.focused === true ||
-        data.focused === "true" ||
-        data.tabbed === true ||
-        data.tabbed === "true" ||
-        data.hidden === false ||
-        data.hidden === "false"
-    ) {
+    if (isDataTrue(data.focused) || isDataTrue(data.tabbed)) {
         state.appReadyForPrompt = true;
     }
 }
@@ -1905,6 +1934,7 @@ window.addEventListener("message", async (event) => {
         setPublicKeyStatus("Auto Loaded");
     }
 
+    updateAppOpenState(data);
     updateAppPromptState(data);
 
     if (data.pos_x !== undefined) {
@@ -1960,6 +1990,12 @@ function bindEvents() {
     elements.privateKeyInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
             savePrivateKey();
+        }
+    });
+
+    window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            pinApp();
         }
     });
 }
