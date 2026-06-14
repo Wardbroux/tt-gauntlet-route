@@ -419,6 +419,7 @@ select {
             <div>Private Key: <span id="privateKeyStatus">Missing</span></div>
         </div>
 
+        <button id="openPrivateKeyButton" type="button">Change Private Key</button>
         <button id="reloadDataButton" type="button">Reload Data</button>
     </div>
 </div>
@@ -426,12 +427,12 @@ select {
 <div class="modal-backdrop" id="privateKeyModal">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="privateKeyTitle">
         <div class="modal-header">
-            <div class="modal-title" id="privateKeyTitle">Welcome</div>
+            <div class="modal-title" id="privateKeyTitle">Private Key</div>
             <button class="icon-button" id="modalCloseButton" type="button" title="Close">X</button>
         </div>
 
         <p class="modal-copy">
-            Welcome to TT Gauntlet Helper. Please input your private key here to start the app.
+            Enter or update your private key here.
         </p>
         <p class="modal-copy">
             If you need to grab it through the in-game chat command, close this window and reopen the app after copying it.
@@ -444,7 +445,7 @@ select {
         </div>
 
         <input id="privateKeyInput" type="password" placeholder="Enter Private API Key" autocomplete="off" />
-        <button id="savePrivateKeyButton" type="button">Start App</button>
+        <button id="savePrivateKeyButton" type="button">Save Private Key</button>
     </div>
 </div>
 
@@ -1243,7 +1244,6 @@ function loadCollectorWaypoint() {
 async function reloadData() {
     if (!state.initialized) {
         notify("Enter your private key first");
-        showPrivateKeyModal();
         return;
     }
 
@@ -1667,7 +1667,7 @@ SETTINGS
 ========================================
 */
 
-function savePrivateKey() {
+async function savePrivateKey() {
     state.privateKey = elements.privateKeyInput.value.trim();
 
     if (!state.privateKey) {
@@ -1681,6 +1681,11 @@ function savePrivateKey() {
     if (!state.identityReady) {
         notify("Waiting for user data");
         requestNamedData();
+        return;
+    }
+
+    if (state.initialized) {
+        await reloadData();
         return;
     }
 
@@ -1900,8 +1905,10 @@ function updatePrivateKeyModalText() {
 
 function showPrivateKeyModal() {
     updatePrivateKeyModalText();
+    elements.privateKeyInput.value = state.privateKey || "";
     elements.privateKeyModal.classList.add("active");
     elements.privateKeyInput.focus();
+    elements.privateKeyInput.select();
 }
 
 function hidePrivateKeyModal() {
@@ -1942,11 +1949,7 @@ function handleIdentityData() {
         return;
     }
 
-    if (!state.appReadyForPrompt) {
-        return;
-    }
-
-    showPrivateKeyModal();
+    setPrivateKeyStatus("Missing");
 }
 
 window.addEventListener("message", async (event) => {
@@ -2012,7 +2015,8 @@ function bindEvents() {
     document.getElementById("nextWaypointButton").addEventListener("click", nextWaypoint);
     document.getElementById("autoAdvanceButton").addEventListener("click", toggleAutoAdvance);
     document.getElementById("savePrivateKeyButton").addEventListener("click", savePrivateKey);
-    document.getElementById("modalCloseButton").addEventListener("click", closeApp);
+    document.getElementById("modalCloseButton").addEventListener("click", hidePrivateKeyModal);
+    document.getElementById("openPrivateKeyButton").addEventListener("click", showPrivateKeyModal);
     document.getElementById("reloadDataButton").addEventListener("click", reloadData);
     document.getElementById("businessDetailCloseButton").addEventListener("click", hideBusinessDetail);
     elements.businessSortMode.addEventListener("change", renderBusinesses);
